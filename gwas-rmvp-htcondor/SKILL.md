@@ -1,11 +1,11 @@
 ---
 name: gwas-rmvp-htcondor
-description: Run multi-trait multi-model GWAS (GLM + MLM + FarmCPU) with rMVP on a HTCondor cluster. Handles PLINK BED → rMVP big.matrix conversion, VanRaden kinship, PC covariates, per-trait batching, adaptive λ_GC-driven PC tuning (sweep PC ∈ {0,1,2,3,5,7,10} and pick winner per (trait,model)), hardlink-based final_results consolidation to save hundreds of GB, and Python post-processing (Manhattan + QQ + top-hits summary) with English-only titles to avoid CJK font issues.
+description: Run multi-trait multi-model GWAS (GLM + MLM + FarmCPU + BLINK) with rMVP on a HTCondor cluster. Handles PLINK BED → rMVP big.matrix conversion, VanRaden kinship with genotype-fingerprint cache validation, PC covariates, per-trait batching with automatic retry, adaptive λ_GC-driven PC tuning (sweep PC ∈ {0,1,2,3,5,7,10} and pick winner per (trait,model)), hardlink-based final_results consolidation, multi-model consensus SNP integration (high-confidence loci), Python post-processing (per-trait Manhattan + QQ, multi-trait stacked Manhattan, trait×chrom hotspot heatmaps), and a single-file embedded HTML report. English-only plot titles to avoid CJK font issues.
 ---
 
 # GWAS with rMVP + HTCondor
 
-Use this skill when the user wants GWAS on a SLURM/HTCondor cluster with many traits and wants all three of GLM, MLM, FarmCPU in one sweep, with Manhattan/QQ plots and top-hits tables.
+Use this skill when the user wants GWAS on a SLURM/HTCondor cluster with many traits and wants all four of GLM, MLM, FarmCPU, BLINK in one sweep, with Manhattan/QQ plots, multi-model consensus loci, and an embedded HTML report.
 
 ## When to use
 
@@ -51,6 +51,7 @@ Directory naming convention:
 │   ├── rmvp.condor                   # HTCondor submit file (vanilla universe)
 │   ├── mvp.geno.{bin,desc,ind,map}   # produced by 01_prepare_data.R
 │   ├── kinship.rds                   # VanRaden K, cached on first run
+│   ├── kinship.fp                    # fingerprint "<size>_<mtime>_<md5>" of mvp.geno.bin — invalidates K on geno change
 │   ├── logs/                         # HTCondor .log .out .err
 │   ├── tune/                         # (optional) adaptive PC tuning artifacts
 │   │   ├── runs/                     # trait_XX_pcNN/ per-combination CSVs — DELETE after final_results built (hardlink preserves data)
@@ -61,16 +62,23 @@ Directory naming convention:
 │       ├── trait_XX.{GLM,MLM,FarmCPU}.csv
 │       ├── best_pc_table.tsv
 │       └── _summary.tsv
-└── post_gwas/
-    ├── plot_rmvp_all.py              # Manhattan/QQ + summary tables
-    ├── extract_all_bonf.py           # Bonferroni / suggestive hit extraction
+    └── post_gwas/
+    ├── extract_all_bonf.py           # Bonferroni / suggestive hit extraction (run 1st)
+    ├── extract_high_confidence.py    # multi-model consensus SNPs + locus clustering (run 2nd)
+    ├── plot_rmvp_all.py              # per-trait Manhattan/QQ (run 3rd) — MODELS=[GLM,MLM,FarmCPU,BLINK]
+    ├── plot_multitrait_summary.py    # stacked multi-trait Manhattan + trait×chrom heatmaps (run 4th)
+    ├── generate_html_report.py       # single-file embedded HTML report (run 5th/last)
     ├── plots/                        # trait_XX.{model}.{manhattan,qq}.png  (ENGLISH titles only, see pitfall)
+    ├── report.html                   # portable single-file report (base64-embedded PNGs)
     └── summary/
-        ├── per_trait_model_summary.tsv    # n_p, min_p, lambda_gc, n_bonf, n_sugg
+        ├── per_trait_model_summary.tsv    # n_p, min_p, lambda_gc, n_bonf, n_sugg (one row per trait×model)
         ├── top10_per_trait_model.tsv
         ├── bonferroni_significant_hits.tsv
         ├── suggestive_hits.tsv
-        └── model_overlap_by_trait.tsv
+        ├── model_overlap_by_trait.tsv
+        ├── high_confidence_snps.tsv       # SNPs significant in ≥N models (default 2)
+        ├── high_confidence_loci.tsv       # windowed cluster of consensus SNPs
+        └── model_agreement_matrix.tsv     # pairwise model overlap across traits
 ```
 
 Symlink bridges (for scripts with hardcoded relative paths like `../pheno_filtered.tsv` in rMVP .R scripts):
@@ -116,55 +124,24 @@ Produces `mvp.geno.{bin,desc,ind,map}`. Takes 5–20 min for ~16M SNPs × 140 sa
 
 ### 3. Main GWAS driver `02_run_rMVP.R`
 
-Key parts (full template in `templates/02_run_rMVP.R`):
+Use `templates/02_run_rMVP.R` directly — it already bakes in three critical features that the naive driver lacks:
 
-```r
-args <- commandArgs(trailingOnly=TRUE)
-trait_start <- as.integer(args[1]); trait_end <- as.integer(args[2])
+**A. Kinship fingerprint cache validation.** Naive `if (file.exists(\"kinship.rds\")) readRDS(...)` will happily load a stale K when the genotype file has changed underneath. This driver computes a fingerprint `"<size>_<mtime>_<md5>"` of `mvp.geno.bin` and stores it in `kinship.fp`. On next run, if the fingerprint mismatches, K is recomputed; otherwise the cached `kinship.rds` is reused. Invalidation is automatic and free on cache-hit.
 
-geno <- attach.big.matrix("mvp.geno.desc")
-map  <- read.table("mvp.geno.map", header=TRUE, stringsAsFactors=FALSE)
-ind_raw <- readLines("mvp.geno.ind")
-# CRITICAL: rMVP strips leading zeros → restore zero-padding to match fam/pheno
-ind <- sprintf("%03d", as.integer(ind_raw))
+**B. Trait-level retry (inside R, not shell).** Each trait is wrapped in a `tryCatch` + retry loop (default 3 attempts, 30s sleep + `gc()` between). Controlled via env `RMVP_RETRY`. **Why trait-level, not shell-level**: a shell-level `&& break` would rerun the whole batch on any single trait failure — wasting hours on the 20 traits that already succeeded. Retries at trait granularity preserve completed work; unrecoverable failures log `[FAIL]` and `next` to the following trait.
 
-pheno_all <- read.delim("../pheno_filtered.tsv", stringsAsFactors=FALSE,
-                        colClasses=c("FID"="character","IID"="character"))
-pheno_all <- pheno_all[match(ind, pheno_all$IID), ]
-trait_names <- colnames(pheno_all)[-(1:2)]
+**C. Four-model sweep.** `method = c("GLM","MLM","FarmCPU","BLINK")`. BLINK is rMVP-built-in, costs ~10–20% extra wall-clock but adds an independent method for consensus filtering. No external deps.
 
-pc_data <- read.delim("../regenie_covariates/quant_pc3.tsv", stringsAsFactors=FALSE,
-                      colClasses=c("FID"="character","IID"="character"))
-pc_data <- pc_data[match(ind, pc_data$IID), ]
-CV <- as.matrix(pc_data[, c("PC1","PC2","PC3")])
+Env vars honored by the driver:
 
-if (file.exists("kinship.rds")) {
-    K <- readRDS("kinship.rds")
-} else {
-    K <- MVP.K.VanRaden(geno, verbose=TRUE)
-    saveRDS(K, "kinship.rds")
-}
+| Var | Default | Purpose |
+|---|---|---|
+| `OMP_NUM_THREADS` | 16 | → `ncpus` in MVP() call |
+| `RMVP_NPC` | 3 | Number of PC columns used as covariates (0 = none). Adaptive tuning sets this per-run. |
+| `RMVP_RETRY` | 3 | Max attempts per trait before giving up |
+| `RMVP_OUTDIR` | `results` | Output directory for CSVs (tuning sets this to `results/trait_XX_pcNN`) |
 
-bonf <- 0.05 / nrow(map)
-for (i in trait_start:min(trait_end, length(trait_names))) {
-    tname <- trait_names[i]
-    y <- as.numeric(pheno_all[[tname]])
-    if (sum(!is.na(y)) < 50) next        # too few samples
-    pheno_df <- data.frame(IID=ind, y); colnames(pheno_df)[2] <- tname
-    tryCatch({
-        MVP(
-            phe=pheno_df, geno=geno, map=map, K=K,
-            CV.MLM=CV, CV.FarmCPU=CV, nPC.GLM=3,      # PC covariates: PC1-3
-            maxLoop=10, method.bin="static",
-            threshold=bonf,
-            method=c("GLM","MLM","FarmCPU"),
-            ncpus=as.integer(Sys.getenv("OMP_NUM_THREADS","16")),
-            file.output=TRUE, file.type="csv", outpath="results",
-            verbose=FALSE
-        )
-    }, error=function(e) cat("ERR:", conditionMessage(e), "\n"))
-}
-```
+IID zero-padding (`sprintf("%03d", as.integer(ind_raw))`) is project-specific — adjust if your fam uses a different convention.
 
 ### 4. HTCondor submission
 
@@ -175,6 +152,8 @@ set -eo pipefail
 export OMP_NUM_THREADS=16
 export MKL_NUM_THREADS=16
 export OPENBLAS_NUM_THREADS=16
+export RMVP_RETRY=${RMVP_RETRY:-3}         # trait-level retry count
+export RMVP_NPC=${RMVP_NPC:-3}             # PC covariate count (adaptive tuning overrides)
 cd /abs/path/to/05.gwas/rMVP
 /media/nfs1/hermes/miniforge3/bin/Rscript 02_run_rMVP.R "$1" "$2"
 ```
@@ -217,17 +196,38 @@ tail -f logs/rmvp_0.err                      # batch 0 stderr
 ls results/ | wc -l                          # should grow to N_traits × 3 (minus skipped)
 ```
 
-Expected throughput: ~2–5 min per trait × model on 16 cores (15M SNPs, 140 samples). 29 traits × 3 models in 6 batches ≈ 1–3h wall-clock.
+Expected throughput: ~2–5 min per trait × model on 16 cores (15M SNPs, 140 samples). 4 models (GLM/MLM/FarmCPU/BLINK) × 29 traits in 6 batches ≈ 2–4h wall-clock.
 
-### 6. Post-processing (Python)
+### 6. Post-processing (Python) — 5-stage pipeline
 
-Use `templates/plot_rmvp_all.py` — reads every `results/trait_XX.MODEL.csv`, makes Manhattan + QQ, aggregates top hits. Run:
+Run all 5 scripts in order from `<proj>/05.gwas/post_gwas/`. All produce outputs under `summary/`, `plots/`, and `report.html`.
 
 ```bash
 cd <proj>/05.gwas/post_gwas
 mkdir -p plots summary
-nohup /media/nfs1/hermes/miniforge3/bin/python plot_rmvp_all.py > plot_rmvp_all.log 2>&1 &
+PY=/media/nfs1/hermes/miniforge3/bin/python
+BASE=/abs/path/to/05.gwas                  # or the parent dir of final_results/
+
+# 1. Bonferroni + suggestive hit extraction → summary/bonferroni_significant_hits.tsv etc.
+$PY extract_all_bonf.py --base "$BASE"
+
+# 2. Multi-model consensus (high-confidence) SNPs and loci
+#    SNPs hit by ≥ --min-models get logged; neighbors within --window bp collapse to loci
+$PY extract_high_confidence.py --base "$BASE" --min-models 2 --window 100000 --cutoff bonferroni
+
+# 3. Per-trait Manhattan + QQ (one PNG pair per trait × model; 4 models now including BLINK)
+$PY plot_rmvp_all.py
+
+# 4. Multi-trait visualizations: stacked Manhattan + trait×chrom hotspot heatmap
+#    --model picks which model's p-values to use for the stacked plot (FarmCPU recommended)
+$PY plot_multitrait_summary.py --base "$BASE" --model FarmCPU --threshold suggestive
+
+# 5. Single-file HTML report (base64-embeds all PNGs → emailable, no external assets)
+$PY generate_html_report.py --base "$BASE"
+# → produces report.html (typically 1–5 MB for ~30 traits)
 ```
+
+Stages 1–4 are independent after stage 1 writes the summary TSVs. Stage 5 consumes everything. The HTML report is pure stdlib + pandas — no Jinja/Rmarkdown — portable to any browser.
 
 CSV p-value column is named `trait_XX.MODEL` (last column), NOT `p-value` or `P`. Read by position.
 
@@ -237,6 +237,7 @@ Requires: numpy, pandas, matplotlib, scipy (all available in miniforge3 base env
 
 | Param | Value | Why |
 |---|---|---|
+| Models | `c("GLM","MLM","FarmCPU","BLINK")` | 4-model sweep enables consensus filtering (see Multi-model consensus section). BLINK adds ~10–20% wall-clock. |
 | PC count | PC1–PC3 (default), tune up to PC10 if λ misbehaves | Matches 05.srr precedent. Use adaptive tuning (next section) when λ_GC > 1.15 |
 | K method | VanRaden | rMVP default, robust for additive model |
 | GLM PC | `nPC.GLM=3` | rMVP computes internal PCs from K; using 3 here matches external PCs |
@@ -303,9 +304,44 @@ Quality heuristics:
 Typical pattern on this project:
 - GLM: fastest, may be inflated (λ up to 2.7 on polygenic traits)
 - MLM: over-conservative, often 0 Bonferroni hits
-- FarmCPU: most balanced → report FarmCPU as primary, use MLM/GLM for cross-check
+- FarmCPU: most balanced → report FarmCPU as primary, use MLM/GLM/BLINK for cross-check
+- BLINK: similar spirit to FarmCPU but different pseudo-QTN selection; useful as an independent voter for consensus filtering
 
-Significant loci should ideally be supported by FarmCPU AND (MLM OR GLM with reasonable λ).
+Significant loci should ideally be supported by FarmCPU AND at least one of {MLM, GLM with reasonable λ, BLINK}. See the high-confidence section below for automation.
+
+## Multi-model consensus (high-confidence loci)
+
+`extract_high_confidence.py` integrates the four model outputs to produce publication-grade consensus calls.
+
+**Algorithm**:
+1. For each (trait, model), collect SNPs passing `--cutoff` (default Bonferroni; `suggestive` or a raw float like `1e-6` also accepted).
+2. Per SNP, count how many models called it; keep SNPs with count ≥ `--min-models` (default 2).
+3. Cluster consecutive consensus SNPs within `--window` bp (default 100kb) on the same chromosome into loci. Each locus records lead SNP, supporting models union, and participating traits.
+
+**Outputs** (in `summary/`):
+- `high_confidence_snps.tsv`: one row per (trait, SNP) with `models_hit` (comma-joined), `n_models`, and min p across models
+- `high_confidence_loci.tsv`: one row per locus (trait, chrom, start, end, lead_snp, lead_p, models_union, n_snps)
+- `model_agreement_matrix.tsv`: pairwise model overlap counts across all traits — a quick health check (if GLM∩MLM is very low while GLM∩FarmCPU is high, GLM likely inflated)
+
+**Tuning guidance**:
+- For strict papers: `--min-models 3 --cutoff bonferroni`
+- For discovery / QTL prioritization: `--min-models 2 --cutoff suggestive`
+- `--window` should match your LD decay scale — 100kb is a reasonable default for selfing plants; widen to 500kb for outbreeders.
+
+## Rejected optimizations (don't re-add these)
+
+When reviewing this skill, the following suggestions were evaluated and **rejected with reason**. Don't re-add without new evidence.
+
+| Suggestion | Reason rejected |
+|---|---|
+| `BiocParallel::MulticoreParam` in R | rMVP uses its own `ncpus` parameter; BiocParallel is not plumbed through and adds zero benefit. |
+| `bigmemory::attach.big.matrix(..., backingcache="mmap")` | rMVP already memory-maps the geno via big.matrix backing file. Adding `backingcache="mmap"` doesn't change behavior. |
+| Shell-level `while retry; do Rscript ... && break; done` | Reruns the ENTIRE batch on any single trait failure, wasting hours. Replaced with R-level `tryCatch` per trait. |
+| Per-chromosome QQ plots | λ_GC is a genome-wide statistic; per-chrom QQ is not diagnostic and clutters the report. Genome-wide QQ is sufficient. |
+| FASTLMM | Not in rMVP; separate tool. If needed, spin up a new skill. |
+| `FarmCPU++`, `SUPERMODEL` | Not real tools (at time of writing) — likely hallucinated names. |
+| Auto GFF annotation of lead SNPs | Kept as a future extension — too project-specific (species, GFF version, nomenclature) to bake into a general skill. Annotate downstream with `bedtools intersect` against your local GFF. |
+| LD block visualization (Haploview-style) | Heavy dep (LDBlockShow / PLINK --blocks) for marginal gain in an HTML report. Can be added per-project if needed. |
 
 ## Common pitfalls
 
@@ -327,10 +363,14 @@ Symptom: batch shows "Normal termination" but started multiple times.
 Cause: preemption on shared cluster. rMVP writes to disk atomically per trait, so partial progress is preserved and Condor auto-resubmits. Final results are correct.
 Fix: none needed; just verify all `results/trait_XX.*.csv` are present after completion.
 
-### Memory OOM on LTR-rich genomes
+### HTCondor memory hold
 
 Symptom: Job goes on hold with `RequestMemory` exceeded.
-Fix: `condor_qedit <JobId> RequestMemory 100000` (MB), `condor_release <JobId>`. For genomes >1Gb consider 120GB.
+Diagnosis for GWAS specifically:
+- ~150 samples × 16M SNPs typically peaks at 30–50GB
+- Kinship matrix is n×n (small for n<500), not the bottleneck
+- Multiple parallel batches each mmap the big.matrix backing file — count copies × per-process working set
+Fix: `condor_qedit <JobId> RequestMemory 80000` (MB), `condor_release <JobId>`. For >300 samples or running ≥3 parallel batches per node, request 96GB up front.
 
 ### Plots library
 
@@ -374,12 +414,15 @@ Check `_signals.csv` too — FarmCPU's internal threshold may differ. Also inspe
 ## Verification checklist
 
 After the pipeline finishes:
-- [ ] `ls final_results/*.csv | wc -l` == `N_traits_analyzed × 3` (exclude skipped traits)
+- [ ] `ls final_results/*.csv | wc -l` == `N_traits_analyzed × 4` (GLM/MLM/FarmCPU/BLINK; exclude skipped traits)
 - [ ] If using adaptive PC tuning: `stat -c '%h %n' final_results/*.csv | awk '$1<2'` returns nothing (all hardlinked)
-- [ ] `per_trait_model_summary.tsv` has one row per (trait, model)
-- [ ] `λ_GC` median near 1.0 for FarmCPU and MLM
-- [ ] Plot folder has `2 × N × 3` PNG files, all with English-only titles (`grep -l '[\x{4e00}-\x{9fff}]' plots/*.png` returns nothing — but PNGs are binary, so just spot-check 2-3 with vision)
-- [ ] HTCondor logs show no `ERR:` lines (re-run any error traits individually)
+- [ ] `per_trait_model_summary.tsv` has one row per (trait, model) including BLINK
+- [ ] `λ_GC` median near 1.0 for FarmCPU, MLM, and BLINK
+- [ ] `kinship.fp` exists next to `kinship.rds` (fingerprint cache active)
+- [ ] Plot folder has `2 × N × 4` PNG files (Manhattan + QQ × 4 models), all with English-only titles
+- [ ] `summary/high_confidence_loci.tsv` exists and is non-empty on traits with known QTL
+- [ ] `report.html` opens standalone in a browser (all PNGs base64-embedded)
+- [ ] HTCondor logs show no lingering `[FAIL]` lines (traits that exhausted `RMVP_RETRY`). Re-run those individually with higher memory.
 - [ ] Reports written to `<proj>/05.gwas/report/gwas_summary.md` (NOT `<proj>/00.report/`)
 - [ ] `tune/runs/` deleted if adaptive tuning was used and hardlinks verified
 - [ ] No `__pycache__/` left in scripts/post_gwas dirs (`find . -name __pycache__ -exec rm -rf {} +`)

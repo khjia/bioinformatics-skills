@@ -41,7 +41,7 @@ if cmap_path.exists():
 else:
     TRAIT_ZH = {}
 
-MODELS = ['GLM', 'MLM', 'FarmCPU']
+MODELS = ['GLM', 'MLM', 'FarmCPU', 'BLINK']
 # EDIT: list of traits that were actually run (exclude any skipped with n_valid<50)
 TRAITS = [f'trait_{i:02d}' for i in range(1, 30) if i != 3]
 
