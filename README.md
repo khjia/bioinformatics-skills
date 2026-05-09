@@ -29,6 +29,8 @@ Tested on common-bean (Phaseolus vulgaris) genotype panel, ~16M SNPs × 140–22
 
 **Citing**: any paper using this skill must cite rMVP (Yin et al., 2021) plus the original method paper for each model reported (Yu 2006 for MLM, Liu 2016 for FarmCPU, Huang 2019 for BLINK, VanRaden 2008 for K). Full reference list + BibTeX + a suggested Methods-section sentence are in `gwas-rmvp-htcondor/SKILL.md` under **Citations**.
 
+**中文使用说明**: see `gwas-rmvp-htcondor/README_zh.md` for a Chinese quickstart covering inputs, the 5-step pipeline, adaptive PC tuning, multi-model consensus, common pitfalls, and the verification checklist.
+
 ## Layout
 
 ```
