@@ -14,16 +14,20 @@ Each skill captures an end-to-end pipeline with:
 ## Skills
 
 ### gwas-rmvp-htcondor
-Run multi-trait multi-model GWAS (GLM + MLM + FarmCPU) with rMVP on an HTCondor cluster. Handles:
+Run multi-trait multi-model GWAS (GLM + MLM + FarmCPU + BLINK) with rMVP on an HTCondor cluster. Handles:
 - PLINK BED → rMVP `big.matrix` conversion
-- VanRaden kinship with caching
+- VanRaden kinship with **fingerprint cache validation** (auto-invalidates on genotype change)
 - External PC covariates (from LD-pruned PCA)
-- Per-trait HTCondor batching with auto-resubmit on eviction
+- Per-trait HTCondor batching with **trait-level retry** (`RMVP_RETRY`) and auto-resubmit on eviction
 - **Adaptive λ_GC-driven PC tuning**: sweep PC ∈ {0,1,2,3,5,7,10}, pick the count that lands each (trait, model) inside the λ_GC [0.85, 1.15] band
 - **Hardlink-based `final_results/` consolidation** to save hundreds of GB of intermediate sweep output
-- Python post-processing: Manhattan + QQ plots (English-only titles to sidestep CJK font issues) + top-hits summary tables
+- **Multi-model consensus**: SNPs significant in ≥ N models → `high_confidence_loci.tsv`
+- Python post-processing: per-trait Manhattan + QQ, multi-trait stacked Manhattan, trait × chrom hotspot heatmaps (English-only titles to sidestep CJK font issues)
+- **Single-file HTML report** (base64-embedded PNGs, stdlib + pandas only)
 
-Tested on common-bean (Phaseolus vulgaris) genotype panel, ~16M SNPs × 140–225 samples, 26–29 traits × 3 models per run.
+Tested on common-bean (Phaseolus vulgaris) genotype panel, ~16M SNPs × 140–225 samples, 26–29 traits × 4 models per run.
+
+**Citing**: any paper using this skill must cite rMVP (Yin et al., 2021) plus the original method paper for each model reported (Yu 2006 for MLM, Liu 2016 for FarmCPU, Huang 2019 for BLINK, VanRaden 2008 for K). Full reference list + BibTeX + a suggested Methods-section sentence are in `gwas-rmvp-htcondor/SKILL.md` under **Citations**.
 
 ## Layout
 

@@ -427,6 +427,82 @@ After the pipeline finishes:
 - [ ] `tune/runs/` deleted if adaptive tuning was used and hardlinks verified
 - [ ] No `__pycache__/` left in scripts/post_gwas dirs (`find . -name __pycache__ -exec rm -rf {} +`)
 
+## Citations (mandatory for any paper using this skill)
+
+If you publish results produced by this pipeline, you **must** cite rMVP itself and the original method paper for every model you report. Reviewers in plant/animal genomics routinely check this.
+
+**Must cite (the tool)**:
+
+- Yin L, Zhang H, Tang Z, Xu J, Yin D, Zhang Z, Yuan X, Zhu M, Zhao S, Li X, Liu X. **rMVP: A Memory-efficient, Visualization-enhanced, and Parallel-accelerated Tool For Genome-Wide Association Study.** *Genomics, Proteomics & Bioinformatics.* 2021;19(4):619–628. doi:10.1016/j.gpb.2020.10.007
+
+**Must cite (per model you report)**:
+
+- **MLM** (Yu et al. 2006) — Yu J, Pressoir G, Briggs WH, et al. *A unified mixed-model method for association mapping that accounts for multiple levels of relatedness.* Nature Genetics. 2006;38(2):203–208. doi:10.1038/ng1702
+- **FarmCPU** (Liu et al. 2016) — Liu X, Huang M, Fan B, Buckler ES, Zhang Z. *Iterative Usage of Fixed and Random Effect Models for Powerful and Efficient Genome-Wide Association Studies.* PLoS Genetics. 2016;12(2):e1005767. doi:10.1371/journal.pgen.1005767
+- **BLINK** (Huang et al. 2019) — Huang M, Liu X, Zhou Y, Summers RM, Zhang Z. *BLINK: a package for the next level of genome-wide association studies with both individuals and markers in the millions.* GigaScience. 2019;8(2):giy154. doi:10.1093/gigascience/giy154
+- **GLM** — no single canonical reference; linear regression for GWAS is textbook. Cite the rMVP paper for the implementation.
+
+**Must cite (kinship)**:
+
+- **VanRaden K** (VanRaden 2008) — VanRaden PM. *Efficient methods to compute genomic predictions.* Journal of Dairy Science. 2008;91(11):4414–4423. doi:10.3168/jds.2007-0980
+
+**Recommended (upstream / infrastructure)**:
+
+- **PLINK 2** (if used for BED prep / LD pruning) — Chang CC, Chow CC, Tellier LCAM, Vattikuti S, Purcell SM, Lee JJ. *Second-generation PLINK: rising to the challenge of larger and richer datasets.* GigaScience. 2015;4:7. doi:10.1186/s13742-015-0047-8
+- **HTCondor** (if reporting compute environment) — Thain D, Tannenbaum T, Livny M. *Distributed computing in practice: the Condor experience.* Concurrency and Computation: Practice and Experience. 2005;17(2–4):323–356. doi:10.1002/cpe.938
+
+### BibTeX (copy-paste)
+
+```bibtex
+@article{Yin2021rMVP,
+  title   = {{rMVP}: A Memory-efficient, Visualization-enhanced, and Parallel-accelerated Tool For Genome-Wide Association Study},
+  author  = {Yin, Lilin and Zhang, Haohao and Tang, Zhenshuang and Xu, Jingya and Yin, Dong and Zhang, Zhiwu and Yuan, Xiaohui and Zhu, Mengjin and Zhao, Shuhong and Li, Xinyun and Liu, Xiaolei},
+  journal = {Genomics, Proteomics \& Bioinformatics},
+  volume  = {19}, number = {4}, pages = {619--628}, year = {2021},
+  doi     = {10.1016/j.gpb.2020.10.007}
+}
+@article{Yu2006MLM,
+  title   = {A unified mixed-model method for association mapping that accounts for multiple levels of relatedness},
+  author  = {Yu, Jianming and Pressoir, Gael and Briggs, William H and others},
+  journal = {Nature Genetics}, volume = {38}, number = {2}, pages = {203--208}, year = {2006},
+  doi     = {10.1038/ng1702}
+}
+@article{Liu2016FarmCPU,
+  title   = {Iterative Usage of Fixed and Random Effect Models for Powerful and Efficient Genome-Wide Association Studies},
+  author  = {Liu, Xiaolei and Huang, Meng and Fan, Bin and Buckler, Edward S and Zhang, Zhiwu},
+  journal = {PLoS Genetics}, volume = {12}, number = {2}, pages = {e1005767}, year = {2016},
+  doi     = {10.1371/journal.pgen.1005767}
+}
+@article{Huang2019BLINK,
+  title   = {{BLINK}: a package for the next level of genome-wide association studies with both individuals and markers in the millions},
+  author  = {Huang, Meng and Liu, Xiaolei and Zhou, Yao and Summers, Ryan M and Zhang, Zhiwu},
+  journal = {GigaScience}, volume = {8}, number = {2}, pages = {giy154}, year = {2019},
+  doi     = {10.1093/gigascience/giy154}
+}
+@article{VanRaden2008K,
+  title   = {Efficient methods to compute genomic predictions},
+  author  = {VanRaden, P M},
+  journal = {Journal of Dairy Science}, volume = {91}, number = {11}, pages = {4414--4423}, year = {2008},
+  doi     = {10.3168/jds.2007-0980}
+}
+@article{Chang2015PLINK2,
+  title   = {Second-generation {PLINK}: rising to the challenge of larger and richer datasets},
+  author  = {Chang, Christopher C and Chow, Carson C and Tellier, Laurent C A M and Vattikuti, Shashaank and Purcell, Shaun M and Lee, James J},
+  journal = {GigaScience}, volume = {4}, pages = {7}, year = {2015},
+  doi     = {10.1186/s13742-015-0047-8}
+}
+@article{Thain2005Condor,
+  title   = {Distributed computing in practice: the {Condor} experience},
+  author  = {Thain, Douglas and Tannenbaum, Todd and Livny, Miron},
+  journal = {Concurrency and Computation: Practice and Experience}, volume = {17}, number = {2--4}, pages = {323--356}, year = {2005},
+  doi     = {10.1002/cpe.938}
+}
+```
+
+### Suggested Methods-section sentence
+
+> Genome-wide association analysis was performed using rMVP v1.x (Yin et al., 2021), which implements GLM, MLM (Yu et al., 2006), FarmCPU (Liu et al., 2016), and BLINK (Huang et al., 2019). The genomic relationship matrix was computed following VanRaden (2008). The first three principal components from LD-pruned genotypes were included as fixed-effect covariates. Genome-wide significance was set at the Bonferroni threshold (α = 0.05 / N_SNP) and a suggestive threshold of 1/N_SNP. High-confidence loci were defined as SNPs significant in ≥ 2 of the 4 models, clustered within 100 kb windows.
+
 ## See also
 
 - `gwas-gemma-slurm` — alternative single-model GWAS
