@@ -1,0 +1,27 @@
+# HTCondor submit — rMVP GWAS, 6 batches of ~5 traits each (29 traits total).
+# Adjust `arguments` lines to match your N_traits.
+universe       = vanilla
+executable     = run_batch.sh
+initialdir     = /abs/path/to/project/05.gwas/rMVP
+getenv         = True
+should_transfer_files = NO
+request_cpus   = 16
+request_memory = 64GB
+request_disk   = 10GB
+
+log    = logs/rmvp_$(Cluster)_$(Process).log
+output = logs/rmvp_$(Process).out
+error  = logs/rmvp_$(Process).err
+
+arguments = 1 5
+queue
+arguments = 6 10
+queue
+arguments = 11 15
+queue
+arguments = 16 20
+queue
+arguments = 21 25
+queue
+arguments = 26 29
+queue
