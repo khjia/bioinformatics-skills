@@ -31,6 +31,19 @@ Tested on common-bean (Phaseolus vulgaris) genotype panel, ~16M SNPs × 140–22
 
 **中文使用说明**: see `gwas-rmvp-htcondor/README_zh.md` for a Chinese quickstart covering inputs, the 5-step pipeline, adaptive PC tuning, multi-model consensus, common pitfalls, and the verification checklist.
 
+### wgcna-tf-network
+WGCNA module TF-structural gene co-expression network visualization. Pipeline:
+- iTAK-based transcription factor annotation (hmmscan + TF_Rule classification)
+- Per-pathway ring-layout network plots: inner ring = TF, outer ring = structural genes
+- Edge width proportional to WGCNA co-expression weight; TF→structural edges bolded
+- NPG (Nature Publishing Group) color palette
+
+Includes reusable scripts: `itak_classify.py` (standalone TF classifier) and `plot_tf_network.py` (configurable network plotter).
+
+**Citing**: iTAK (Zheng et al., 2016), WGCNA (Langfelder & Horvath, 2008), HMMER (Eddy, 2011). Full BibTeX in `wgcna-tf-network/SKILL.md`.
+
+**中文使用说明**: 见 `wgcna-tf-network/SKILL.md` 底部中文章节。
+
 ## Layout
 
 ```
