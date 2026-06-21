@@ -1,0 +1,21 @@
+# Editors / OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# R
+.Rhistory
+.RData
+.Ruserdata
+
+# Runtime / cache
+*.log
+*.tmp
