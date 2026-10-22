@@ -1,0 +1,17 @@
+#!/bin/bash
+# SGE 数组：N 个任务 = N 个并行 freebayes 进程（用户要求 40 就 -t 1-40）。
+# -pe smp 6 只用于「槽位记账」：40×6=240 槽 → CNS2 上恰好 40 个任务同时跑，剩下 16 槽留给别人。
+# 提交: cd <project>/req/05.variants && \
+#   qsub -q all.q@CNS2 -pe smp 6 -l h_vmem=10G -cwd -o logs/fb_array -e logs/fb_array -t 1-40 scripts/freebayes_call_unit_array.sh
+#$ -N fb_call
+#$ -q all.q@CNS2
+#$ -pe smp 6
+#$ -l h_vmem=10G
+#$ -cwd
+#$ -o logs/fb_array
+#$ -e logs/fb_array
+#$ -t 1-40
+# 说明: freebayes 本身单线程，-pe smp 的值不代表它用几核，只决定 SGE 放多少任务并行。
+test -n "$BASH" || exec /bin/bash "$0" "$@"
+V=<PROJECT_ROOT>/req/05.variants
+bash "$V/scripts/freebayes_call_unit.sh"      # 靠 SGE_TASK_ID 取单元
