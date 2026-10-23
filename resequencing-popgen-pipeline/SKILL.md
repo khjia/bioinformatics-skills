@@ -35,15 +35,13 @@ project/req/
 
 ### 接头与 fastp 参数
 
-DNBSEQ/MGI 数据接头不是 Illumina（reads header `@ML…`）。先 grep 确认，再显式指定。
+接头**不硬编码**，交给 `--detect_adapter_for_pe` 自动探测 —— Illumina / DNBSEQ / MGI 通用。
 
 **统一采用 duzhong 面板实测的标准配置**（`--cut_front --cut_tail` 双向质量剪切，
 不用 `cut_right`）：
 
 ```bash
 fastp \
-    --adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA \
-    --adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG \
     --detect_adapter_for_pe \
     --cut_front --cut_tail --cut_window_size 4 --cut_mean_quality 20 \
     --qualified_quality_phred 20 \
@@ -54,8 +52,26 @@ fastp \
     --thread 8
 ```
 
-> `--detect_adapter_for_pe` 会额外探测 R2 的接头，比只写 `--adapter_sequence` 多探一次，
-> 换来的是非 DNBSEQ 平台也能自动找到接头（对同批数据两种写法结果几乎一致，见下方实测）。
+> **为什么不再写死接头串**：duzhong 的 `fastp.json → adapter_cutting` 里，detect 探出的
+> `read1_adapter_sequence` / `read2_adapter_sequence` 就是那对 DNBSEQ 序列
+> （AAGTCGGAGGCC… / AAGTCGGATCGTA…）——显式写等于手抄一遍自动探测的结果。PE 去掉接头
+> 主要靠 **overlap 分析**，`-a` 只在 R1/R2 不重叠时才用（fastp 1.3.3 `-a` 帮助原文）。
+> 实测（40 万 read 对）：只开 detect 与默认相比 99.61% vs 99.62% bases、接头多裁
+> 1,234 reads / 14,063 bp，量级可忽略。
+>
+> **去掉显式接头后复跑验证**（duzhong 原始 DNBSEQ 数据，SRR37245294 前 20 万 read 对，
+> 即本页上面的命令原样执行）：detect 探出的仍是同一对 DNBSEQ 串，接头裁掉 8,640 reads
+> （2.16%，杜仲全量实跑 2.27%），bases 保留 99.54%（杜仲 99.52%），too_short 0.065%
+> （杜仲 0.06%）—— 与写死接头串的结果一致，说明这两行确实是多余的。
+>
+> **只有一种情况需要显式加接头**：确认是 DNBSEQ/MGI（`zcat R1.fq.gz | head -1` 看到
+> `@ML…` / `@V…`），且 `fastp.json` 显示 `adapter_trimmed_reads` 明显偏低时，再加：
+> ```
+> --adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA \
+> --adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG
+> ```
+> **Illumina 数据绝不要加这两行** —— overlap 失败时会按错误序列裁。Illumina 的接头
+> （AGATCGGAAGAGC…）fastp 默认就会去，不需要指定。
 
 199 样本实测（无花果 req 面板，2026-09，DNBSEQ PE150）：raw 2545 Gb → clean 2424 Gb
 （保留 95.3%），每样本保留率均值 97.78%，Q30 97.08%，GC 35.85%；平均 raw 12.8 Gb/样本；

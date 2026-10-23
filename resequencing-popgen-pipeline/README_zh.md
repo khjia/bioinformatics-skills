@@ -44,8 +44,6 @@
 
 ```bash
 fastp \
-    --adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA \
-    --adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG \
     --detect_adapter_for_pe \
     --cut_front --cut_tail --cut_window_size 4 --cut_mean_quality 20 \
     --qualified_quality_phred 20 \
@@ -59,8 +57,13 @@ fastp \
     --html sample_fastp.html --json sample_fastp.json
 ```
 
-> DNBSEQ/MGI 的接头不是 Illumina（reads header `@ML…`），先 grep 确认再显式指定。
-> 非 DNBSEQ 平台可去掉 `--adapter_sequence*` 两行，靠 `--detect_adapter_for_pe` 自动探测。
+> **接头不写死**：靠 `--detect_adapter_for_pe` 自动探测，Illumina / DNBSEQ / MGI 通用。
+> PE 去接头主要靠 overlap 分析，`-a` 只在 R1/R2 不重叠时才生效；duzhong 的 fastp.json 里
+> detect 探出的正是那对 DNBSEQ 串，显式写等于手抄自动探测结果（实测增量 1,234 reads / 14 kb）。
+> 只有确认是 DNBSEQ/MGI（`zcat R1.fq.gz | head -1` 见 `@ML…`）且 `adapter_trimmed_reads`
+> 明显偏低时，才加 `--adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA`
+> `--adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG`。
+> **Illumina 数据不要加**，其接头 fastp 默认就会去。
 
 **参数严格度实测对比**（duzhong 面板 SRR37245294 前 40 万 read 对，Q30 94.62%）：
 

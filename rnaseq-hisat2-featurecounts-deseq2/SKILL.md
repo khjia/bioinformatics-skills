@@ -122,12 +122,18 @@ fastp \
     -h sample_fastp.html -j sample_fastp.json
 ```
 
-DNBSEQ/MGI 数据接头不是 Illumina（reads header `@ML…`），要显式指定时加：
+**接头一律交给 `--detect_adapter_for_pe` 自动探测**（Illumina / DNBSEQ / MGI 通用），不要写死。
+只有当数据确认是 DNBSEQ/MGI（read header 是 `@ML…` / `@V…`）且 `fastp.json` 里
+`adapter_trimmed_reads` 明显偏低（说明 overlap 去接头失效）时，才临时加上：
 
 ```bash
     --adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA \
     --adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG \
 ```
+
+理由：PE 去接头主要靠 overlap 分析，`-a` 只在 R1/R2 不重叠时才用（fastp 1.3.3 帮助原文）；
+duzhong 的 `fastp.json → adapter_cutting` 里 detect 探出的就是这两串，显式写等于手抄探测结果
+（实测增量 1,234 reads / 14,063 bp）。Illumina 数据加了反而有害——overlap 失败时按错序列裁。
 
 ### Pitfall: fastp 默认参数几乎不过滤（2026-10 实测，duzhong 面板 SRR37245294 前 40 万 read 对）
 
