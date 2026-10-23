@@ -49,7 +49,8 @@ fastp \
     --qualified_quality_phred 20 \
     --n_base_limit 5 \
     --average_qual 20 \
-    --length_required 36 \
+    --length_required 60 \
+    --compression 6 \
     --thread 8
 ```
 
@@ -84,8 +85,10 @@ fastp \
 - **`-u 20` 才是让"低质量 read 被判死"的那一项**：duzhong 原配置没写 `-u`（即默认 u40），
   所以它在这批高质量数据（Q30 94.6%）上表现得几乎等同默认（只丢 526 条 <36bp 的短 read，
   质量剪切实际裁掉 0 个碱基）。**数据质量差的项目（Q30 < 90%）应显式加 `-u 20`。**
-- `--length_required`：duzhong 用 60（DNBSEQ PE150），本流程用 36。**取样长度的 1/3~1/2
-  即可**，不要求全长——太严会因文库长度波动误删样本。
+- **`--length_required 60`（2026-10-23 收紧，原 36）**：duzhong 实测值，= PE150 的 40%。
+  实测（149 bp 数据 20 万 read 对）36 → 60 只多丢 0.23% read，挡掉的是接头二聚体与
+  剪切残端。书架文库（插入片段普遍 < 120 bp）可降到 50，不要低于 36。
+- `--compression 6`（duzhong 值，默认 4）：clean FASTQ 体积更小，CPU 略增，不影响结果。
 - fastp 的 `-q` 默认是 15、`-u` 默认是 40、`-l` 默认是 15，**都不适合直接用**：
   `-q 15` 等于几乎不过滤（实测 lowq=0，整批一条不丢）。
 - **接头去重效果**：`--detect_adapter_for_pe` 比纯默认多探到 1,234 个 read 的接头

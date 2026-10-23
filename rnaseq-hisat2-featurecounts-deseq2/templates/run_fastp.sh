@@ -9,12 +9,13 @@ PROJ=${PROJ:?set PROJ=/path/to/project}
 CLEAN=$PROJ/2.clean
 LOGS=$CLEAN/logs
 THREADS=${THREADS:-8}
-# duzhong 标准配置（2026-10 实测统一）
-LEN_REQ=${LEN_REQ:-36}          # PE150 的 1/4；取样长的 1/3~1/2 即可
+# duzhong 标准配置（2026-10 实测统一；2026-10-23 收紧：length_required 36 -> 60）
+LEN_REQ=${LEN_REQ:-60}          # duzhong 实测值 = PE150 的 40%；实测 36->60 只多丢 0.2-0.3% read
 Q_PHRED=${Q_PHRED:-20}          # fastp 默认 15 几乎不过滤
-U_LIMIT=${U_LIMIT:-40}          # 允许不合格碱基比例；Q30 < 90% 的项目设 20
+U_LIMIT=${U_LIMIT:-40}          # duzhong 未显式给（= 默认 40）；Q30<90% 的项目设 20，代价见 SKILL.md
 CUT_MEAN_Q=${CUT_MEAN_Q:-20}
 CUT_WINDOW=${CUT_WINDOW:-4}
+COMPRESSION=${COMPRESSION:-6}   # duzhong 用 6（默认 4）：文件更小，CPU 略增
 mkdir -p "$CLEAN" "$LOGS"
 
 SHEET=${1:?usage: run_fastp.sh <sample_sheet.tsv>}
@@ -41,6 +42,7 @@ while read -r sid r1 r2; do
         --n_base_limit 5 \
         --average_qual 20 \
         --length_required "$LEN_REQ" \
+        --compression "$COMPRESSION" \
         --thread "$THREADS" \
         -h "$LOGS/${sid}.fastp.html" \
         -j "$LOGS/${sid}.fastp.json" \

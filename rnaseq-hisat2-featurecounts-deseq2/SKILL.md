@@ -116,7 +116,8 @@ fastp \
     --qualified_quality_phred 20 \
     --n_base_limit 5 \
     --average_qual 20 \
-    --length_required 36 \
+    --length_required 60 \
+    --compression 6 \
     -w 16 \
     -h sample_fastp.html -j sample_fastp.json
 ```
@@ -155,8 +156,12 @@ DNBSEQ/MGI 数据接头不是 Illumina（reads header `@ML…`），要显式指
   在这批高质量数据上表现几乎等同默认（只丢 526 条 <36bp 短 read，质量剪切实际裁掉 0 个碱基）。
   **数据质量差的项目（Q30 < 90%）应显式加 `--unqualified_percent_limit 20`**，
   但要接受误杀（见下）。
-- `--length_required 36` = PE150 的 1/4。**取样长的 1/3~1/2 即可**，太严会因文库长度
-  波动误删样本。RNA-seq 有 3' bias，过长的长度门槛会把 3' 端短片段一起丢掉。
+- **`--length_required 60`（2026-10-23 收紧，原 36）= PE150 的 40%。** 实测（无花果
+  SRR10992859，149 bp RNA-seq，20 万 read 对，用已清洗数据隔离长度门槛的净效应）：
+  36 → 60 只多丢 902 条短 read（0.23%），bases 保留 99.99% → 99.91%，Q30 不变。
+  挡掉的是接头二聚体与剪切后的残端，不是有用数据。**若文库插入片段普遍 < 120 bp
+  （降解样本、3' 端严重偏倚），降到 50；不要低于 36。**
+- `--compression 6`（duzhong 值，默认 4）：clean FASTQ 体积更小，CPU 略增，不影响结果。
 - 接头序列若非 DNBSEQ/MGI（reads header 不是 `@ML…`），不要沿用本文档的显式接头串，
   让 `--detect_adapter_for_pe` 自动探测即可。
 

@@ -51,7 +51,8 @@ fastp \
     --qualified_quality_phred 20 \
     --n_base_limit 5 \
     --average_qual 20 \
-    --length_required 36 \
+    --length_required 60 \
+    --compression 6 \
     --thread 8 \
     -i R1.fq.gz -I R2.fq.gz \
     -o clean_R1.fq.gz -O clean_R2.fq.gz \

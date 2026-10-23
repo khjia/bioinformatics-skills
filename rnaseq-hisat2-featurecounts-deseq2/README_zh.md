@@ -25,7 +25,7 @@
 
 | 步骤 | 参数 | 理由 |
 |------|------|------|
-| fastp | `--detect_adapter_for_pe --length_required 30 --qualified_quality_phred 15` | PE 通用配置 |
+| fastp | `--detect_adapter_for_pe --cut_front --cut_tail --cut_window_size 4 --cut_mean_quality 20 -q 20 -n 5 --average_qual 20 --length_required 60 --compression 6` | duzhong 标准（2026-10-23 长度门槛 36→60 收紧） |
 | hisat2-build | `--ss splice_sites.txt --exon exons.txt` | 必须先 GFF3→GTF |
 | hisat2 | `-p 16`，**不加** `--dta` | featureCounts/DESeq2 不需要，省 ~10 GB 内存 |
 | hisat2 | `--rna-strandness` 省略（unstranded） | 链特异文库才用 FR/RF |
@@ -60,7 +60,7 @@ project/
 ## 关键坑点（完整清单见 SKILL.md）
 
 ### fastp / QC
-- **参数用 duzhong 标准配置**：`--detect_adapter_for_pe --cut_front --cut_tail --cut_window_size 4 --cut_mean_quality 20 --qualified_quality_phred 20 --n_base_limit 5 --average_qual 20 --length_required 36`
+- **参数用 duzhong 标准配置**：`--detect_adapter_for_pe --cut_front --cut_tail --cut_window_size 4 --cut_mean_quality 20 --qualified_quality_phred 20 --n_base_limit 5 --average_qual 20 --length_required 60 --compression 6`
 - **`-q`/`-u` 只做整条 read 判定、不裁碱基**；裁碱基必须给 `--cut_front`/`--cut_tail`。fastp 默认 `-q 15 -u 40` 几乎不过滤（实测整批一条不丢）
 - **fastp 默认就已去接头**（`--disable_adapter_trimming` 才是关闭），显式写接头的价值是跨平台可移植，不是清洁度
 - **数据质量差（Q30 < 90%）的项目要加 `--unqualified_percent_limit 20`**，否则低质量 read 全部放行
