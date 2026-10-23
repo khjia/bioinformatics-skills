@@ -35,18 +35,61 @@ project/req/
 
 ### 接头与 fastp 参数
 
-DNBSEQ/MGI 数据接头不是 Illumina（reads header `@ML…`）。先 grep 确认，再显式指定：
+DNBSEQ/MGI 数据接头不是 Illumina（reads header `@ML…`）。先 grep 确认，再显式指定。
+
+**统一采用 duzhong 面板实测的标准配置**（`--cut_front --cut_tail` 双向质量剪切，
+不用 `cut_right`）：
 
 ```bash
-fastp --adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA \
-      --adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG \
-      --cut_right --cut_right_window_size 4 --cut_right_mean_quality 20 \
-      -q 20 -u 40 -n 5 -l 36 --thread 8
+fastp \
+    --adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA \
+    --adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG \
+    --detect_adapter_for_pe \
+    --cut_front --cut_tail --cut_window_size 4 --cut_mean_quality 20 \
+    --qualified_quality_phred 20 \
+    --n_base_limit 5 \
+    --average_qual 20 \
+    --length_required 36 \
+    --thread 8
 ```
 
-199 样本实测：raw 2545 Gb → clean 2424 Gb（保留 95.3%），每样本保留率均值 97.78%，
-Q30 97.08%，GC 35.85%；平均 raw 12.8 Gb/样本；每样本 wall 200-252 s（8 线程，
-4 进程并行 = 32 核，全部 199 样本 3 h 26 min）。
+> `--detect_adapter_for_pe` 会额外探测 R2 的接头，比只写 `--adapter_sequence` 多探一次，
+> 换来的是非 DNBSEQ 平台也能自动找到接头（对同批数据两种写法结果几乎一致，见下方实测）。
+
+199 样本实测（无花果 req 面板，2026-09，DNBSEQ PE150）：raw 2545 Gb → clean 2424 Gb
+（保留 95.3%），每样本保留率均值 97.78%，Q30 97.08%，GC 35.85%；平均 raw 12.8 Gb/样本；
+每样本 wall 200-252 s（8 线程，4 进程并行 = 32 核，全部 199 样本 3 h 26 min）。
+
+### fastp 参数：默认 vs 各配置实测对比（2026-10 实测，duzhong 面板 SRR37245294 前 40 万 read 对）
+
+同一份真实数据跑 4 套参数。**关键结论：fastp 默认参数已经把接头去掉了**
+（`--disable_adapter_trimming` 才是关闭接头去除），所以"显式写接头"相对默认的增量很小；
+真正决定严格度的是 `--cut_*` 质量剪切和 `-u`（unqualified_percent_limit）。
+
+| 配置 | bases 保留 | 平均读长 | Q30 | 被质量剔除 | 3'端 Q<20 碱基数/20万read |
+|------|-----------|---------|-----|-----------|----------------------|
+| **fastp 默认**（无参数） | 99.62% | 149.0 | 94.62 | 0 | 2803 |
+| `--detect_adapter_for_pe` only | 99.61% | 149.0 | 94.62 | 0 | 2803 |
+| **旧重测序参数**（`cut_right` + `-u 40`） | 93.08% | 148.0 | **96.91** | 366 | **1254** |
+| **duzhong 标准**（`cut_front+cut_tail` + `-q20`） | 99.54% | 149.0 | 94.66 | 0 | 2436 |
+| duzhong + `-u 20` | 95.74% | 149.0 | 95.99 | 30,674 | — |
+
+读法与坑：
+
+- **`-q`/`-u` 只做"整条 read 判定"，不裁单个碱基**。`-q 20 -u 40` 意为"允许 40% 碱基
+  不合格"，所以质量差的 read 基本都活着通过。真正裁碱基必须给 `--cut_front`/`--cut_tail`。
+- **`cut_right` 极其激进**：遇到一个低质量窗口就砍掉它**及其右侧全部**。它在这份数据上
+  保留率最低（93.08%）但 Q30 提升最多（96.91%），且低质量碱基残留最少（1254）。
+  已统一改为 `cut_front + cut_tail`（温和裁剪，两端各自裁到合格为止）。
+- **`-u 20` 才是让"低质量 read 被判死"的那一项**：duzhong 原配置没写 `-u`（即默认 u40），
+  所以它在这批高质量数据（Q30 94.6%）上表现得几乎等同默认（只丢 526 条 <36bp 的短 read，
+  质量剪切实际裁掉 0 个碱基）。**数据质量差的项目（Q30 < 90%）应显式加 `-u 20`。**
+- `--length_required`：duzhong 用 60（DNBSEQ PE150），本流程用 36。**取样长度的 1/3~1/2
+  即可**，不要求全长——太严会因文库长度波动误删样本。
+- fastp 的 `-q` 默认是 15、`-u` 默认是 40、`-l` 默认是 15，**都不适合直接用**：
+  `-q 15` 等于几乎不过滤（实测 lowq=0，整批一条不丢）。
+- **接头去重效果**：`--detect_adapter_for_pe` 比纯默认多探到 1,234 个 read 的接头
+  （17,424 vs 16,190），多裁 14,063 个碱基——量级很小但方向正确。
 
 ### 参考：a 套 + 叶绿体 + 线粒体
 

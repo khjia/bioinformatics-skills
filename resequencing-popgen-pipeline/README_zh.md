@@ -39,10 +39,39 @@
 ## 分析流程
 
 ### 第1步：质控（fastp）
+
+统一采用 **duzhong 标准配置**（`--cut_front --cut_tail` 双向质量剪切，不用 `cut_right`）：
+
 ```bash
-fastp --adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA       --adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG       --cut_right --cut_right_window_size 4 --cut_right_mean_quality 20       -q 20 -u 40 -n 5 -l 36 --thread 8       -i R1.fq.gz -I R2.fq.gz -o clean_R1.fq.gz -O clean_R2.fq.gz       --html sample_fastp.html --json sample_fastp.json
+fastp \
+    --adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA \
+    --adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG \
+    --detect_adapter_for_pe \
+    --cut_front --cut_tail --cut_window_size 4 --cut_mean_quality 20 \
+    --qualified_quality_phred 20 \
+    --n_base_limit 5 \
+    --average_qual 20 \
+    --length_required 36 \
+    --thread 8 \
+    -i R1.fq.gz -I R2.fq.gz \
+    -o clean_R1.fq.gz -O clean_R2.fq.gz \
+    --html sample_fastp.html --json sample_fastp.json
 ```
+
 > DNBSEQ/MGI 的接头不是 Illumina（reads header `@ML…`），先 grep 确认再显式指定。
+> 非 DNBSEQ 平台可去掉 `--adapter_sequence*` 两行，靠 `--detect_adapter_for_pe` 自动探测。
+
+**参数严格度实测对比**（duzhong 面板 SRR37245294 前 40 万 read 对，Q30 94.62%）：
+
+| 配置 | bases 保留 | Q30 | 被质量剔除 | 3'端 Q<20 碱基/20万read |
+|------|-----------|-----|-----------|----------------------|
+| fastp 默认 | 99.62% | 94.62 | 0 | 2803 |
+| 旧参数（`cut_right` + `-u 40`） | 93.08% | 96.91 | 366 | 1254 |
+| **duzhong 标准（本流程现用）** | 99.54% | 94.66 | 0 | 2436 |
+| duzhong + `-u 20` | 95.74% | 95.99 | 30,674 | — |
+
+坑：`-q`/`-u` 只做整条 read 判定、不裁碱基；`--cut_*` 才裁碱基；fastp 默认 `-q 15 -u 40`
+几乎不过滤；数据质量差（Q30 < 90%）的项目要显式加 `--unqualified_percent_limit 20`。
 
 ### 第2步：比对（minibwa + samtools）
 ```bash

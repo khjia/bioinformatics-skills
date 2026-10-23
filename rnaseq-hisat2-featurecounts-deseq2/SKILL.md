@@ -107,16 +107,57 @@ vdb-dump /path/to/SRR123.sra --info   # prints "platf : SRA_PLATFORM_ILLUMINA" /
 NCBI `esummary` needs the **numeric UID** (get via `esearch` first), not the SRR accession directly (`Invalid uid` error otherwise). ENA `filereport` returns empty when the network is blocked — don't rely on it.
 
 ```bash
-# Standard paired-end RNA-seq filtering
+# Standard paired-end RNA-seq filtering — 与重测序流程统一采用 duzhong 标准配置
 fastp \
     -i sample_R1.fastq.gz -I sample_R2.fastq.gz \
     -o sample_clean_R1.fastq.gz -O sample_clean_R2.fastq.gz \
     --detect_adapter_for_pe \
-    --length_required 30 \
-    --qualified_quality_phred 15 \
+    --cut_front --cut_tail --cut_window_size 4 --cut_mean_quality 20 \
+    --qualified_quality_phred 20 \
+    --n_base_limit 5 \
+    --average_qual 20 \
+    --length_required 36 \
     -w 16 \
     -h sample_fastp.html -j sample_fastp.json
 ```
+
+DNBSEQ/MGI 数据接头不是 Illumina（reads header `@ML…`），要显式指定时加：
+
+```bash
+    --adapter_sequence AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA \
+    --adapter_sequence_r2 AAGTCGGATCGTAGCCATGTCGTTCTGTGAGCCAAGGAGTTG \
+```
+
+### Pitfall: fastp 默认参数几乎不过滤（2026-10 实测，duzhong 面板 SRR37245294 前 40 万 read 对）
+
+**`-q`/`-u` 只做"整条 read 判定"，不裁单个碱基。** 裁碱基必须显式给 `--cut_front`/`--cut_tail`/
+`--cut_right`。fastp 的默认值 `-q 15 -u 40 -l 15` 极其宽松——`-q 15` 意为"只有不到 40% 的碱基
+低于 Q15 才丢整条 read"，实测下来**整批一条不丢**（lowq=0），Q30 一点不提升。
+
+同一份真实数据（Q30 94.62%）跑 4 套参数：
+
+| 配置 | bases 保留 | 平均读长 | Q30 | 被质量剔除 | 3'端 Q<20 碱基数/20万read |
+|------|-----------|---------|-----|-----------|----------------------|
+| **fastp 默认**（无参数） | 99.62% | 149.0 | 94.62 | 0 | 2803 |
+| `--detect_adapter_for_pe` only | 99.61% | 149.0 | 94.62 | 0 | 2803 |
+| **旧转录组参数**（`-q 15`，无 cut） | 99.61% | 149.0 | 94.62 | **0** | 2800 |
+| **duzhong 标准**（本流程现用） | 99.54% | 149.0 | 94.66 | 0 | 2436 |
+| duzhong + `-u 20` | 95.74% | 149.0 | 95.99 | 30,674 | — |
+
+读法与坑：
+
+- **fastp 默认就已经去接头了**（`--disable_adapter_trimming` 才是关闭）。所以"显式写接头"
+  相对默认的增量很小：`--detect_adapter_for_pe` 只多探到 1,234 个 read 的接头、多裁 14,063 个碱基。
+  显式写接头的价值主要是**跨平台可移植**（换数据源不必重测），不是清洁度。
+- **`--cut_front --cut_tail` 是温和裁剪**：两端各自裁到合格为止，不会砍掉大半条 read。
+  相比 `--cut_right`（遇一个低质量窗口就砍掉它**及其右侧全部**）损失小得多。
+- **`-u 20` 才是让"低质量 read 被判死"的那一项**。duzhong 原配置没写 `-u`（默认 u40），
+  在这批高质量数据上表现几乎等同默认（只丢 526 条 <36bp 短 read，质量剪切实际裁掉 0 个碱基）。
+  **数据质量差的项目（Q30 < 90%）应显式加 `--unqualified_percent_limit 20`。**
+- `--length_required 36` = PE150 的 1/4。**取样长的 1/3~1/2 即可**，太严会因文库长度
+  波动误删样本。RNA-seq 有 3' bias，过长的长度门槛会把 3' 端短片段一起丢掉。
+- 接头序列若非 DNBSEQ/MGI（reads header 不是 `@ML…`），不要沿用本文档的显式接头串，
+  让 `--detect_adapter_for_pe` 自动探测即可。
 
 ## Stage 2: HISAT2 Alignment
 

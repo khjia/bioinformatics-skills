@@ -60,6 +60,10 @@ project/
 ## 关键坑点（完整清单见 SKILL.md）
 
 ### fastp / QC
+- **参数用 duzhong 标准配置**：`--detect_adapter_for_pe --cut_front --cut_tail --cut_window_size 4 --cut_mean_quality 20 --qualified_quality_phred 20 --n_base_limit 5 --average_qual 20 --length_required 36`
+- **`-q`/`-u` 只做整条 read 判定、不裁碱基**；裁碱基必须给 `--cut_front`/`--cut_tail`。fastp 默认 `-q 15 -u 40` 几乎不过滤（实测整批一条不丢）
+- **fastp 默认就已去接头**（`--disable_adapter_trimming` 才是关闭），显式写接头的价值是跨平台可移植，不是清洁度
+- **数据质量差（Q30 < 90%）的项目要加 `--unqualified_percent_limit 20`**，否则低质量 read 全部放行
 - **数据量报 bases (Gb)，不报压缩文件 GB**——从 fastp JSON 的 `after_filtering.total_bases` 读，不要重新解压去数
 - **fastp 的 `total_reads` 是单端 read 数**（PE 时 = pair 数 × 2）；PE pair 数要从 HISAT2 log 取
 - **假 PE 检测**：ENA 标 PAIRED 但实际单端 → 看 FASTQ header 的 read-index 是 1,2,1,2（真 PE）还是 1,2,3,4（单端）
