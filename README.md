@@ -57,3 +57,37 @@ resequencing-popgen-pipeline/
 
 **硬性约定**：SNP calling 一律使用 **freebayes**，不使用 `bcftools mpileup/call`；bcftools 只用于
 calling 之后的 VCF 工具链（concat / norm / index / stats / +fixploidy）。
+
+### `vcf-to-gwas` — VCF → GWAS → 单性状报告
+
+VCF → plink2 质控 / LD 剪枝 / PCA → Fast3VmrMLM 多位点 GWAS → 最近基因注释
+→ 每个性状一份 7 图 12 表 HTML 报告（Manhattan/QQ、主峰区域图、±1 Mb 全部基因、
+区域 QTN 信号、候选基因单倍型）。
+
+```
+vcf-to-gwas/
+├── SKILL.md              # 主文档（流程、参数、方法、实测坑点 + Citations）
+├── README_zh.md          # 中文速查说明
+├── templates/
+│   ├── 01_vcf2plink.sh              # VCF→bed、统一 ID、LD 剪枝、PCA
+│   ├── 02_make_inputs.R             # trait.csv / PCA.csv（按 .fam 顺序）
+│   ├── 03_run_fast3vmrmlm.R         # Fast3VmrMLM v2.0
+│   ├── 04_annotate_qtl.py           # QTN 最近基因注释（±50 kb）
+│   ├── 05_gene_coords.R             # GFF3 → gene_coords.rds
+│   ├── 20_trait_report_figs.R       # 单性状图表
+│   ├── 21_trait_report.Rmd          # 报告模板
+│   ├── 22_render_all.R              # 批量渲染
+│   ├── 00_config.example.R          # 报告配置模板
+│   ├── pipeline.env.example         # 流程环境变量模板
+│   └── run_all.sh                   # 一键串联（RUN_REPORTS=1 时含报告）
+└── references/
+    └── pitfalls.md                  # 实测坑点
+```
+
+核心坑点（详见 SKILL.md）：
+- Fast3VmrMLM 的 **LOD 与单标记 −log₁₀P 不可混用**（前者来自多位点模型）
+- `trait.csv` / `PCA.csv` 按行对齐 `.fam`，表头必须是 `<Phenotype>` / `<pca>`
+- 非标准染色体需 `--allow-extra-chr`；变异 ID 统一为 `chr:pos:ref:alt`
+- 区域缺失率 10–17% 时，提取基因型要放宽 `--geno`（0.1 → 0.25 → 0.5）
+- 表格单元格若只有 `+`/`-` 会被 pandoc 当成列表，破坏整张表
+

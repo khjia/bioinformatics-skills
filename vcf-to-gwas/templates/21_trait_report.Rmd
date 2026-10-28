@@ -1,0 +1,339 @@
+---
+title: "元宝枫 GWAS 单性状分析报告"
+subtitle: "性状：`r params$cn`（`r params$trait`）｜群体：200 份元宝枫种质"
+date: "`r Sys.Date()`"
+params:
+  prefix: "fa"
+  trait: "fa_C16_0"
+  cn: "棕榈酸 C16:0"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: false
+    self_contained: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center")
+suppressMessages({library(data.table); library(knitr)})
+WDIR <- Sys.getenv("GWAS_WDIR", getwd())
+CFG  <- Sys.getenv("GWAS_CONFIG", file.path(WDIR, "scripts/00_config.R"))
+source(CFG)
+
+PREFIX <- params$prefix; TR <- params$trait; CN <- params$cn
+OUT  <- file.path(res_dir, paste0(PREFIX, "_", TR, "_report"))
+FIGD <- file.path(fig_dir, paste0(PREFIX, "_", TR, "_report"))
+rd <- function(f) fread(file.path(OUT, f))
+
+phe  <- rd("tab_pheno.tsv")
+sm   <- rd("tab_summary.tsv")
+qchr <- rd("tab_qtn_chr.tsv")
+q20  <- rd("tab_qtn_top20.tsv")
+qall <- rd("tab_qtn_all.tsv")
+cand <- rd("tab_candidate_genes.tsv")
+ngene <- rd("tab_genes_near_peak.tsv")
+sig  <- rd("tab_signals.tsv")
+hap  <- rd("tab_hap.tsv")
+if (nrow(hap)) hap[, top_hap := mapply(function(x, w) formatC(as.numeric(x), width = w, flag = "0"),
+                                       top_hap, n_tags)]
+
+embed_img <- function(f, cap, width = 1000) {
+  p <- file.path(FIGD, f)
+  if (!file.exists(p)) {
+    cat(sprintf("<p style='color:#c00;font-weight:bold'>缺失图片：%s</p>\n", f)); return(invisible(NULL))
+  }
+  cat(sprintf("<div class='figbox'><img src='%s' style='max-width:%dpx;width:100%%'/><div class='figcap'>%s</div></div>\n",
+              knitr::image_uri(p), width, cap))
+}
+fmtp <- function(x) ifelse(x < 1e-300, "0", formatC(x, format = "e", digits = 2))
+
+CAT <- if (PREFIX == "vee") "维生素 E 组分" else if (TR == "oil_g100g") "含油量" else if (TR == "protein_g100g") "蛋白质含量" else if (TR == "seed_weight_g") "千粒重" else "脂肪酸组分"
+fam <- c(KCS = "KCS/FAE 缩合酶", FAE = "KCS/FAE 缩合酶", FAD = "脂肪酸去饱和酶",
+         SAD = "硬脂酰-ACP 去饱和酶", desaturase = "去饱和酶", elongase = "脂肪酸延长酶",
+         DGAT = "二酰甘油酰基转移酶", PDAT = "磷脂:二酰甘油酰基转移酶", ACP = "酰基载体蛋白",
+         thioesterase = "硫酯酶", tocopherol = "生育酚合成", VTE = "生育酚合成",
+         GPP = "GGPP 合成", HPPD = "HPPD", methyltransferase = "甲基转移酶")
+hits <- unique(unname(fam[vapply(names(fam), function(k)
+  any(grepl(k, cand$Preferred_name, ignore.case = TRUE) | grepl(k, cand$`eggNOG free text description`, ignore.case = TRUE)), logical(1))]))
+```
+
+<style>
+body { font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 15px; line-height: 1.75; }
+h1 { font-size: 26px; margin-top: 28px; }
+h2 { font-size: 21px; border-left: 5px solid #2F5597; padding-left: 10px; margin-top: 30px; }
+h3 { font-size: 17px; color: #1F3864; margin-top: 22px; }
+.figbox { margin: 18px 0 22px 0; page-break-inside: avoid; }
+.figbox img { display: block; margin: 0 auto; border: 1px solid #E3E3E3; }
+.figcap { text-align: center; font-size: 13.5px; color: #333; margin-top: 8px; }
+table { font-size: 13px; margin: 12px auto 20px auto; }
+caption { caption-side: top; font-size: 14px; font-weight: 600; color: #1F3864; padding-bottom: 6px; }
+.small { font-size: 13px; color: #555; }
+</style>
+
+# 1　摘要
+
+本报告对 200 份元宝枫（*Acer truncatum*）种质的 **`r CN`**（性状代号 `r TR`，类别：`r CAT`）开展单性状全基因组关联分析。基因型为 2,494,579 个双等位 SNP（13 条染色体，MAF ≥ 0.05），关联模型为多位点混合模型 Fast3VmrMLM v2.0（3 个主成分为固定协变量），显著性阈值为 Bonferroni *p* = 2.00×10⁻⁸（对应 LOD = 7.7）。
+
+主要结果：
+
+- 表型近似正态（*n* = `r phe$n`，均值 `r sprintf("%.3f", phe$mean)`，SD `r sprintf("%.3f", phe$sd)`，CV `r sprintf("%.1f", 100*phe$cv)`%，Shapiro-Wilk *p* = `r sprintf("%.2f", phe$shapiro_p)`）。
+- 共检出 **`r sm$n_qtn` 个 QTN**（SIG `r sm$n_sig` 个，SUG `r sm$n_sug` 个），分布于 `r nrow(qchr)` 条染色体；最高 LOD = `r sprintf("%.2f", sm$max_lod)`。
+- 主峰锚定于 **`r sm$anchor_chr` `r sprintf("%.2f", sm$anchor_pos/1e6)` Mb**（QTN `r sm$anchor`，LOD = `r sprintf("%.2f", q20$lod[1])`），主峰 ±1 Mb 窗口内含 **`r sm$n_genes` 个基因**（表 8）。
+- 该窗口内 QTN 最集中的候选基因为 **`r cand$gene_id[1]`**（注释：`r cand$Preferred_name[1]`；区域内 QTN `r cand$n_qtn[1]` 个，最高 LOD `r sprintf("%.2f", cand$max_lod[1])`）。
+- 主峰窗口内按 50 kb 去冗余后共 **`r nrow(sig)` 个 QTN 信号**；对窗口内前 3 个候选基因做单倍型关联，`r if (nrow(hap)) sprintf("最强为 %s（KW p = %s）", hap$gene_id[which.min(hap$KW_p)], fmtp(min(hap$KW_p))) else "未获得可用单倍型"`。
+
+# 2　材料与方法
+
+## 2.1　群体与表型
+
+供试材料为 200 份元宝枫种质，单株观测。目标性状为 `r CN`（`r TR`）。表型分布与正态性检验见图 1 与表 1；全部分析使用同一套表型值，未做额外离群值剔除或表型转换。
+
+```{r tab1}
+t1 <- data.table(
+  项目 = c("物种", "供试材料", "性状", "性状类别", "样本量 n", "均值", "标准差 SD",
+           "变异系数 CV", "最小值", "最大值", "Shapiro-Wilk p"),
+  取值 = c("元宝枫（Acer truncatum）", "200 份种质（单株）", sprintf("%s（%s）", CN, TR), CAT,
+           phe$n, sprintf("%.3f", phe$mean), sprintf("%.3f", phe$sd),
+           sprintf("%.1f%%", 100*phe$cv), sprintf("%.3f", phe$min), sprintf("%.3f", phe$max),
+           sprintf("%.3f", phe$shapiro_p)))
+kable(t1, caption = "表 1　数据集与表型概况", format = "html", row.names = FALSE)
+```
+
+## 2.2　基因型与质控
+
+基因型为全基因组重测序变异集，经双等位 SNP、缺失率与次等位基因频率过滤后保留 **2,494,579 个 SNP**，分布于 13 条染色体（chr01a–chr13a），MAF ≥ 0.05。关联分析直接使用该 SNP 集，未做 LD 抽稀，以保留定位分辨率。
+
+## 2.3　全基因组关联模型
+
+采用多位点混合线性模型 **Fast3VmrMLM v2.0**，以 3 个主成分（`PopStrType = "PC"`）为固定效应协变量控制群体结构。显著性判定沿用软件内置 Bonferroni 校正：*p* = 0.05 / 2,494,579 = **2.00×10⁻⁸**，对应 **LOD = 7.7**；LOD ≥ 7.7 记为 **SIG**，3 < LOD < 7.7 记为 **SUG**。
+
+```{r tab2}
+pk <- c("data.table", "ggplot2", "patchwork", "ggrepel", "knitr", "rmarkdown")
+ver <- vapply(pk, function(p) as.character(packageVersion(p)), character(1))
+t2 <- data.table(
+  组件 = c("R", pk, "Fast3VmrMLM", "PLINK", "Pandoc"),
+  版本 = c(as.character(getRversion()), unname(ver), "2.0", "v2.0.0-a.6.9LM",
+           as.character(rmarkdown::pandoc_version())),
+  用途 = c("统计计算与绘图", "数据处理", "图形语法", "多图拼接", "标签避让", "表格与报告渲染",
+           "HTML 渲染", "多位点 GWAS", "基因型提取与 LD 计算", "文档转换"))
+kable(t2, caption = "表 2　软件与依赖版本", format = "html", row.names = FALSE)
+```
+
+## 2.4　主峰定义与区域信号
+
+以 LOD 最高且带基因注释的 QTN 作为**主峰锚点**；主峰窗口定义为锚点 ±1 Mb，用于区域关联图、基因列表与候选基因筛选。区域信号由 Fast3VmrMLM 的多位点 QTN 输出直接汇总：窗口内 QTN 按 LOD 降序，保留彼此相距 ≥ 50 kb 的位点，作为该区域的独立信号代表。
+
+## 2.5　单倍型关联
+
+在主峰窗口内，按“QTN 数 → 最高 LOD → 与锚点距离”排序取候选基因；提取基因体 ±1 kb 内 SNP，先做单标记关联，保留 *p* < 0.05 者为标签候选，按 *p* 升序以 *r*² < 0.8 去冗余，最多 4 个标签 SNP；标签 SNP 的基因型组合构成单倍型，频率 < 5% 合并为“其他”。关联检验采用 Kruskal-Wallis 与单因素方差分析（ANOVA）。最终展示成功构建单倍型的前 3 个基因。
+
+```{r tab3}
+t3 <- data.table(
+  参数 = c("关联模型", "群体结构校正", "主成分数", "Bonferroni 阈值", "对应 LOD 阈值",
+           "SIG / SUG 划分", "主峰窗口", "区域信号去冗余距离", "单倍型侧翼",
+           "标签 SNP 筛选", "标签 SNP 去冗余", "标签 SNP 上限", "单倍型最低频率", "单倍型检验"),
+  取值 = c("Fast3VmrMLM v2.0（多位点混合模型）", "PopStrType = PC", "3",
+           "p = 2.00×10⁻⁸（0.05/2,494,579）", "LOD = 7.7", "SIG：LOD ≥ 7.7；SUG：3 < LOD < 7.7",
+           "锚点 ± 1 Mb", "50 kb", "基因体 ± 1 kb", "单标记 p < 0.05", "r² < 0.8",
+           "4", "5%", "Kruskal-Wallis + ANOVA"),
+  说明 = c("同时估计多个 QTN，降低连锁信号分散", "控制群体分层", "与原始 GWAS 一致",
+           "全基因组显著性", "由 p 阈值换算", "软件输出分类", "基因列表与候选筛选范围",
+           "合并相邻 QTN 为同一信号", "覆盖启动子/UTR 邻近区", "初筛标签", "避免共线标签",
+           "控制单倍型维度", "低频合并为“其他”", "非参数 + 参数双检验"))
+kable(t3, caption = "表 3　关键分析参数（含非默认取值）", format = "html", row.names = FALSE)
+```
+
+# 3　结果
+
+## 3.1　表型变异
+
+`r CN` 在 200 份种质中呈连续分布（图 1），均值 `r sprintf("%.3f", phe$mean)`，变异范围 `r sprintf("%.3f", phe$min)`–`r sprintf("%.3f", phe$max)`，CV 为 `r sprintf("%.1f", 100*phe$cv)`%。
+
+```{r fig1, results='asis'}
+embed_img("f1_pheno.png", sprintf("图 1　%s 在 200 份元宝枫种质中的分布。浅蓝柱为频数直方图，深蓝曲线为核密度估计，红色虚线为群体均值。", CN), 900)
+```
+
+## 3.2　全基因组关联信号
+
+Manhattan 图（图 2）显示全基因组关联格局；共有 `r sm$n_snp_sig` 个 SNP 达到 Bonferroni 显著（*p* < 2.0×10⁻⁸），`r sm$n_snp_sug` 个达到提示性显著（*p* < 1×10⁻⁵），最小 *p* = `r fmtp(sm$min_p)`。QQ 图（图 3）尾部偏离对角线，提示真实关联信号；λ_GC = `r sprintf("%.3f", sm$lambda)`。
+
+```{r fig2, results='asis'}
+embed_img("f2_manhattan.png", sprintf("图 2　%s 全基因组关联 Manhattan 图。纵坐标为单标记 −log₁₀P；深蓝/浅蓝点分别代表奇数/偶数染色体；红色三角与圆点分别标注 SIG 与 SUG QTN；红色点线为 Bonferroni 阈值 2.0×10⁻⁸，灰色虚线为 1×10⁻⁵；标注为 LOD 最高的 4 个 QTN 所在基因。", CN), 1050)
+```
+
+```{r fig3, results='asis'}
+embed_img("f3_qq.png", sprintf("图 3　%s 关联检验的 QQ 图。灰色虚线为 y = x 参考线；λ_GC 由 p 值中位数换算。", CN), 560)
+```
+
+```{r tab4}
+t4 <- data.table(
+  指标 = c("有效 SNP 数", "检出 QTN 数", "SIG（LOD ≥ 7.7）", "SUG（3 < LOD < 7.7）",
+           "最高 LOD", "最小 p", "Bonferroni 显著 SNP 数（p < 2.0×10⁻⁸）",
+           "提示性显著 SNP 数（p < 1×10⁻⁵）", "λ_GC", "主峰窗口基因数", "区域 QTN 信号数"),
+  数值 = c(format(sm$n_snp, big.mark = ","), sm$n_qtn, sm$n_sig, sm$n_sug,
+           sprintf("%.2f", sm$max_lod), fmtp(sm$min_p), sm$n_snp_sig, sm$n_snp_sug,
+           sprintf("%.3f", sm$lambda), sm$n_genes, sm$n_signals))
+kable(t4, caption = "表 4　全基因组关联结果总体统计", format = "html", row.names = FALSE)
+```
+
+## 3.3　QTN 的染色体分布
+
+`r sm$n_qtn` 个 QTN 分布于 `r nrow(qchr)` 条染色体（图 4、表 5）；chr`r sub("^chr", "", qchr[which.max(SIG + SUG), chr])` 数量最多（`r max(qchr$SIG + qchr$SUG)` 个）。
+
+```{r fig4, results='asis'}
+embed_img("f4_qtn_chr.png", sprintf("图 4　%s 检出 QTN 的染色体分布。深蓝为 SIG（LOD ≥ 7.7），浅蓝为 SUG（3 < LOD < 7.7）；柱内数字为 QTN 数，仅显示至少含 1 个 QTN 的染色体。", CN), 860)
+```
+
+```{r tab5}
+t5 <- copy(qchr); t5[, 合计 := SIG + SUG]
+setnames(t5, c("chr", "SIG", "SUG", "合计"), c("染色体", "SIG（LOD ≥ 7.7）", "SUG", "合计"))
+kable(t5, caption = "表 5　QTN 在各染色体的分布", format = "html", row.names = FALSE)
+```
+
+LOD 最高的 20 个 QTN 见表 6。
+
+```{r tab6}
+t6 <- q20[1:20, .(基因 = gene_id, 染色体 = chr, 位置 = sprintf("%.2f", pos/1e6),
+                  LOD = sprintf("%.2f", lod), 显著性 = significance,
+                  功能注释 = fifelse(is.na(Preferred_name) | Preferred_name == "-", "—", Preferred_name))]
+setnames(t6, c("基因", "染色体", "位置 (Mb)", "LOD", "显著性", "功能注释"))
+kable(t6, caption = "表 6　LOD 最高的 20 个 QTN", format = "html", row.names = FALSE)
+```
+
+## 3.4　主峰区域与候选基因
+
+主峰锚点为 `r sm$anchor`（`r sm$anchor_chr` `r sprintf("%.2f", sm$anchor_pos/1e6)` Mb，LOD = `r sprintf("%.2f", q20$lod[1])`）。区域关联图（图 5）给出 ±1 Mb 窗口内各 SNP 的 −log₁₀P 与相对最强单标记的 *r*²，下方为基因模型。
+
+窗口内共 `r sm$n_genes` 个基因（表 8）。按 QTN 数与最高 LOD 排序的前 3 个候选基因见表 7，其中 `r cand$gene_id[1]` 含 `r cand$n_qtn[1]` 个 QTN（最高 LOD = `r sprintf("%.2f", cand$max_lod[1])`），注释为 `r cand$Preferred_name[1]`。
+
+```{r fig5, results='asis'}
+embed_img("f5_locus_zoom.png", sprintf("图 5　%s 主峰区域关联图（%s %.2f–%.2f Mb）。上panel：各 SNP 的 −log₁₀P，颜色表示与区域最强单标记（红色竖虚线）的 r²（5 档）；下panel：基因模型，灰色为其他基因，红色标注为候选基因。", CN, sm$anchor_chr, sm$window_start/1e6, sm$window_end/1e6), 1000)
+```
+
+```{r tab7}
+t7 <- cand[, .(基因 = gene_id, 染色体 = chr, 起止 = sprintf("%.3f–%.3f", start/1e6, end/1e6),
+               `功能注释` = fifelse(is.na(Preferred_name) | Preferred_name == "-", "—", Preferred_name),
+               EC = fifelse(is.na(EC) | EC == "-", "—", EC),
+               拟南芥同源 = sub("^([A-Za-z0-9]+)\\..*$", "\\1", A.thaliana),
+               区域内QTN数 = n_qtn, 最高LOD = sprintf("%.2f", max_lod))]
+kable(t7, caption = "表 7　主峰窗口内 QTN 最集中的候选基因", format = "html", row.names = FALSE)
+```
+
+### 3.4.1　主峰附近全部基因
+
+表 8 列出主峰 ±1 Mb 范围内全部 `r nrow(ngene)` 个基因的位置、链、与锚点距离、功能注释、EC 号、拟南芥同源及区域内 QTN 数。
+
+```{r tab8genes, results='asis'}
+t8g <- ngene[, .(基因 = gene_id, 起止 = sprintf("%.3f–%.3f", start/1e6, end/1e6),
+                 链 = fifelse(strand == "+", "正链", "负链"), `与锚点距离(kb)` = sprintf("%.0f", dist_kb),
+                 功能注释 = fun, EC = fifelse(is.na(EC) | EC == "-", "—", EC),
+                 拟南芥同源 = fifelse(is.na(at_id) | at_id == "-", "—", at_id),
+                 拟南芥功能 = fifelse(is.na(at_desc) | at_desc == "", "—", at_desc),
+                 `QTN数` = n_qtn,
+                 `最高LOD` = fifelse(is.na(max_lod), "—", sprintf("%.2f", max_lod)))]
+cat("<div style='max-height:560px;overflow-y:auto'>")
+cat(kable(t8g, caption = sprintf("表 8　主峰（%s）±1 Mb 内全部基因及其功能注释", sm$anchor), format = "html", row.names = FALSE))
+cat("</div>")
+```
+
+## 3.5　区域 QTN 信号
+
+主峰窗口内的 QTN 按 50 kb 去冗余后共 `r nrow(sig)` 个信号（图 6、表 9）。
+
+```{r fig6, results='asis'}
+embed_img("f6_qtn_region.png", sprintf("图 6　%s 主峰窗口内 QTN 的 LOD 分布。竖线高度为各 QTN 的 LOD，颜色区分 SIG/SUG；灰色虚线为 LOD 7.7（Bonferroni 阈值）；标注为基因名。", CN), 980)
+```
+
+```{r tab9}
+if (nrow(sig)) {
+  t8 <- sig[, .(序号 = rank, 标记 = marker, 位置 = sprintf("%.3f", pos/1e6),
+                LOD = sprintf("%.2f", lod), 显著性 = significance,
+                基因 = fifelse(is.na(gene_id) | gene_id == "", "—", gene_id),
+                `与锚点距离(kb)` = sprintf("%.0f", dist_kb))]
+  setnames(t8, c("序号", "标记", "位置 (Mb)", "LOD", "显著性", "基因", "与锚点距离 (kb)"))
+  kable(t8, caption = "表 9　主峰窗口内的区域 QTN 信号（50 kb 去冗余）", format = "html", row.names = FALSE)
+} else {
+  cat("<p>主峰窗口内未获得可用 QTN 信号。</p>")
+}
+```
+
+## 3.6　候选基因单倍型
+
+对窗口内候选基因构建单倍型，成功者见表 10 与图 7。
+
+```{r fig7, results='asis'}
+embed_img("f7_haplotype.png", paste0("图 7　", CN, " 主峰候选基因的单倍型-表型关联。箱线图按单倍型均值升序排列，横轴括号内为样本数；深蓝为频率 ≥ 5% 的高频单倍型，灰色为合并后的低频单倍型（< 5%）；标题下方给出标签 SNP 数与 Kruskal-Wallis p 值。"), 1050)
+```
+
+```{r tab10}
+if (nrow(hap)) {
+  t9 <- hap[, .(基因 = gene_id, 标签SNP数 = n_tags, 单倍型数 = n_hap,
+                `KW p` = fmtp(KW_p), `ANOVA p` = fmtp(ANOVA_p),
+                最优单倍型 = top_hap, 最优均值 = sprintf("%.2f", top_mean))]
+  kable(t9, caption = "表 10　候选基因的单倍型关联结果", format = "html", row.names = FALSE)
+} else {
+  cat("<p>窗口内候选基因未获得可用单倍型（标签 SNP 不足或频率过低）。</p>")
+}
+```
+
+# 4　讨论
+
+## 4.1　主峰候选基因
+
+主峰窗口内 QTN 最集中的基因依次为 `r paste(cand$gene_id, collapse = "、")`，其功能注释为 `r paste(ifelse(is.na(cand$Preferred_name) | cand$Preferred_name == "-", "未注释", cand$Preferred_name), collapse = "、")`。
+
+`r if (length(hits)) sprintf("上述基因中，%s 属于与该性状代谢直接相关的功能类别，可作为优先验证对象。", paste(hits, collapse = "、")) else "上述基因的注释未直接指向已知的脂肪酸或生育酚代谢酶类，主峰可能通过调控、转运或其他代谢途径影响该性状。"`
+
+需要强调的是，QTN 与单倍型结果仅提供统计关联证据；主峰窗口内基因数量较多且存在连锁，候选基因的因果性需通过表达分析、单倍型-表达关联、异源表达或基因编辑进一步验证。
+
+## 4.2　局限
+
+1. **单环境、单年代表型**：未分解基因型 × 环境互作，定位结果的外推需多环境重复验证。
+2. **统计量尺度**：Fast3VmrMLM 的 LOD 为多位点模型证据，与单标记 −log₁₀P 不可直接比较；本报告在图中明确区分。
+3. **群体规模**：*n* = 200 对低频变异检测功效有限，λ_GC < 1 时检验偏保守，可能漏检弱效应位点。
+4. **单倍型分析为探索性**：未对多基因/多性状做全局多重校正，*p* 值应视为候选排序依据。
+5. **主峰窗口的选择**：以 LOD 最高 QTN ±1 Mb 定义，若存在多个效应相当的主峰，其他峰未展开分析（可在后续报告中补充）。
+
+# 5　附录
+
+## 5.1　交付文件
+
+```{r tab11}
+t10 <- data.table(
+  文件 = c(
+    sprintf("figures/%s_%s_report/f1_pheno.png", PREFIX, TR),
+    sprintf("figures/%s_%s_report/f2_manhattan.png", PREFIX, TR),
+    sprintf("figures/%s_%s_report/f3_qq.png", PREFIX, TR),
+    sprintf("figures/%s_%s_report/f4_qtn_chr.png", PREFIX, TR),
+    sprintf("figures/%s_%s_report/f5_locus_zoom.png", PREFIX, TR),
+    sprintf("figures/%s_%s_report/f6_qtn_region.png", PREFIX, TR),
+    sprintf("figures/%s_%s_report/f7_haplotype.png", PREFIX, TR),
+    sprintf("results/%s_%s_report/tab_summary.tsv", PREFIX, TR),
+    sprintf("results/%s_%s_report/tab_qtn_all.tsv", PREFIX, TR),
+    sprintf("results/%s_%s_report/tab_genes_near_peak.tsv", PREFIX, TR),
+    sprintf("results/%s_%s_report/tab_signals.tsv", PREFIX, TR),
+    sprintf("results/%s_%s_report/tab_hap.tsv", PREFIX, TR),
+    "scripts/20_trait_report_figs.R", "report/21_trait_report.Rmd"),
+  内容 = c("表型分布", "Manhattan 图", "QQ 图", "QTN 染色体分布", "主峰区域关联图",
+           "区域 QTN LOD 分布", "单倍型关联图", "总体统计", "全部 QTN（含注释）",
+           "主峰附近基因注释", "区域 QTN 信号", "单倍型结果", "图表生成脚本", "本报告模板"))
+kable(t10, caption = "表 11　交付文件清单", format = "html", row.names = FALSE)
+```
+
+## 5.2　全部 QTN
+
+```{r tab12}
+t11 <- qall[, .(基因 = gene_id, 染色体 = chr, 位置 = sprintf("%.3f", pos/1e6),
+                标记 = marker, LOD = sprintf("%.2f", lod), 显著性 = significance,
+                功能注释 = fifelse(is.na(Preferred_name) | Preferred_name == "-", "—", Preferred_name))]
+setnames(t11, c("基因", "染色体", "位置 (Mb)", "标记", "LOD", "显著性", "功能注释"))
+kable(t11, caption = sprintf("表 12　全部 %d 个 QTN 及其注释", nrow(qall)), format = "html", row.names = FALSE)
+```
+
+<div class="small">
+说明：本报告中的“QTN”指 Fast3VmrMLM 多位点模型输出的显著/提示性位点；SIG 与 SUG 的划分依据软件内置 Bonferroni 阈值（LOD = 7.7）。所有图件与表格均由同一套结果文件生成，参数与版本见表 2、表 3。
+</div>
