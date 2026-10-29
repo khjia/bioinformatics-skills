@@ -109,7 +109,7 @@ p2 <- ggplot(db, aes(cum, neglog)) +
   geom_point(data = qt, aes(cum, neglog, shape = significance), colour = "#C00000",
              size = 2.7, stroke = 0.8, inherit.aes = FALSE) +
   geom_hline(yintercept = -log10(BONF), colour = "#FF0000", linetype = "dotted", linewidth = 0.55) +
-  geom_hline(yintercept = 5, colour = "grey35", linetype = "dashed", linewidth = 0.45) +
+
   geom_text_repel(data = topl, aes(cum, neglog, label = lab), inherit.aes = FALSE,
                   size = 2.7, colour = "#7F0000", min.segment.length = 0,
                   max.overlaps = Inf, segment.size = 0.25, direction = "y",

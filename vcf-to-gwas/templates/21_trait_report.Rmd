@@ -125,6 +125,17 @@ t1 <- data.table(
 kable(t1, caption = "表 1　数据集与表型概况", format = "html", row.names = FALSE)
 ```
 
+**名词解释（先看这一节）**
+
+- **QTN（quantitative trait nucleotide，数量性状位点）**：多位点模型判定与性状显著相关的遗传标记。它不一定是真正的因果突变，也可能只是与因果位点处在同一 LD 区块里的“代理”标记。
+- **LOD**：似然比的对数（log₁₀），越大表示“该位点与性状有关”的证据越强。LOD = 7.7 大约相当于单标记检验 *p* = 2×10⁻⁸。
+- **SIG（显著）**：LOD ≥ 7.7，达到全基因组 Bonferroni 阈值。
+- **SUG（提示性）**：3 < LOD < 7.7，证据较弱，只作参考，不作为结论。
+- **LD（连锁不平衡）**：邻近变异一起遗传的现象。LD 强时，一串变异会同时显著，统计上很难区分谁才是真正的因果位点。
+- **可信集（credible set）**：精细定位给出的“最可能包含因果变异的候选集合”，集合越小、PIP 越高，定位越精确。
+- **PIP（后验包含概率）**：某变异属于因果变异的模型后验概率（0–1），只用于排序，不等于“99% 就是它”。
+- **标签 SNP（tag SNP）**：从一段高度连锁的变异中挑出的少数代表位点，用它们的基因型组合代表单倍型，从而降低维度。
+
 ## 2.2　基因型与质控
 
 基因型为全基因组重测序变异集，经双等位 SNP、缺失率与次等位基因频率过滤后保留 **2,494,579 个 SNP**，分布于 13 条染色体（chr01a–chr13a），MAF ≥ 0.05。关联分析直接使用该 SNP 集，未做 LD 抽稀，以保留定位分辨率。
@@ -134,15 +145,12 @@ kable(t1, caption = "表 1　数据集与表型概况", format = "html", row.nam
 采用多位点混合线性模型 **Fast3VmrMLM v2.0**，以 3 个主成分（`PopStrType = "PC"`）为固定效应协变量控制群体结构。显著性判定沿用软件内置 Bonferroni 校正：*p* = 0.05 / 2,494,579 = **2.00×10⁻⁸**，对应 **LOD = 7.7**；LOD ≥ 7.7 记为 **SIG**，3 < LOD < 7.7 记为 **SUG**。
 
 ```{r tab2}
-pk <- c("data.table", "ggplot2", "patchwork", "ggrepel", "knitr", "rmarkdown")
-ver <- vapply(pk, function(p) as.character(packageVersion(p)), character(1))
+susie_ver <- tryCatch(as.character(packageVersion("susieR")), error = function(e) "—")
 t2 <- data.table(
-  组件 = c("R", pk, "Fast3VmrMLM", "PLINK", "Pandoc"),
-  版本 = c(as.character(getRversion()), unname(ver), "2.0", "v2.0.0-a.6.9LM",
-           as.character(rmarkdown::pandoc_version())),
-  用途 = c("统计计算与绘图", "数据处理", "图形语法", "多图拼接", "标签避让", "表格与报告渲染",
-           "HTML 渲染", "多位点 GWAS", "基因型提取与 LD 计算", "文档转换"))
-kable(t2, caption = "表 2　软件与依赖版本", format = "html", row.names = FALSE)
+  软件 = c("R", "Fast3VmrMLM", "PLINK 2.0", "susieR"),
+  版本 = c(as.character(getRversion()), "2.0", "v2.0.0-a.6.9LM", susie_ver),
+  用途 = c("统计计算与绘图", "多位点 GWAS", "基因型提取与 LD 计算", "精细定位"))
+kable(t2, caption = "表 2　主要软件与版本", format = "html", row.names = FALSE)
 ```
 
 ## 2.4　主峰定义与区域信号
@@ -151,7 +159,7 @@ kable(t2, caption = "表 2　软件与依赖版本", format = "html", row.names 
 
 ## 2.5　单倍型关联
 
-在主峰窗口内，按“QTN 数 → 最高 LOD → 与锚点距离”排序取候选基因；提取基因体 ±1 kb 内 SNP，先做单标记关联，保留 *p* < 0.05 者为标签候选，按 *p* 升序以 *r*² < 0.8 去冗余，最多 4 个标签 SNP；标签 SNP 的基因型组合构成单倍型，频率 < 5% 合并为“其他”。关联检验采用 Kruskal-Wallis 与单因素方差分析（ANOVA）。最终展示成功构建单倍型的前 3 个基因。
+在主峰窗口内，按“QTN 数 → 最高 LOD → 与锚点距离”排序取候选基因；提取基因体 ±1 kb 内 SNP，先做单标记关联，保留 *p* < 0.05 者为标签候选，按 *p* 升序以 *r*² < 0.8 去冗余，最多 4 个标签 SNP（标签 SNP 是从一段高度连锁的变异中挑出的少数代表位点，用它们的组合概括单倍型）；标签 SNP 的基因型组合构成单倍型，频率 < 5% 合并为“其他”。关联检验采用 Kruskal-Wallis 与单因素方差分析（ANOVA）。最终展示成功构建单倍型的前 3 个基因。
 
 ```{r tab3}
 t3 <- data.table(
@@ -181,10 +189,10 @@ embed_img("f1_pheno.png", sprintf("图 1　%s 在 200 份元宝枫种质中的�
 
 ## 3.2　全基因组关联信号
 
-Manhattan 图（图 2）显示全基因组关联格局；共有 `r sm$n_snp_sig` 个 SNP 达到 Bonferroni 显著（*p* < 2.0×10⁻⁸），`r sm$n_snp_sug` 个达到提示性显著（*p* < 1×10⁻⁵），最小 *p* = `r fmtp(sm$min_p)`。QQ 图（图 3）尾部偏离对角线，提示真实关联信号；λ_GC = `r sprintf("%.3f", sm$lambda)`。
+Manhattan 图（图 2）显示全基因组关联格局；共有 `r sm$n_snp_sig` 个 SNP 达到 Bonferroni 显著（*p* < 2.0×10⁻⁸），最小 *p* = `r fmtp(sm$min_p)`。QQ 图（图 3）尾部偏离对角线，提示真实关联信号；λ_GC = `r sprintf("%.3f", sm$lambda)`。
 
 ```{r fig2, results='asis'}
-embed_img("f2_manhattan.png", sprintf("图 2　%s 全基因组关联 Manhattan 图。纵坐标为单标记 −log₁₀P；深蓝/浅蓝点分别代表奇数/偶数染色体；红色三角与圆点分别标注 SIG 与 SUG QTN；红色点线为 Bonferroni 阈值 2.0×10⁻⁸，灰色虚线为 1×10⁻⁵；标注为 LOD 最高的 4 个 QTN 所在基因。", CN), 1050)
+embed_img("f2_manhattan.png", sprintf("图 2　%s 全基因组关联 Manhattan 图。纵坐标为单标记 −log₁₀P；深蓝/浅蓝点分别代表奇数/偶数染色体；红色三角与圆点分别标注 SIG 与 SUG QTN；红色点线为 Bonferroni 阈值 2.0×10⁻⁸；标注为 LOD 最高的 4 个 QTN 所在基因。", CN), 1050)
 ```
 
 ```{r fig3, results='asis'}
@@ -195,9 +203,9 @@ embed_img("f3_qq.png", sprintf("图 3　%s 关联检验的 QQ 图。灰色虚线
 t4 <- data.table(
   指标 = c("有效 SNP 数", "检出 QTN 数", "SIG（LOD ≥ 7.7）", "SUG（3 < LOD < 7.7）",
            "最高 LOD", "最小 p", "Bonferroni 显著 SNP 数（p < 2.0×10⁻⁸）",
-           "提示性显著 SNP 数（p < 1×10⁻⁵）", "λ_GC", "主峰窗口基因数", "区域 QTN 信号数"),
+           "λ_GC", "主峰窗口基因数", "区域 QTN 信号数"),
   数值 = c(format(sm$n_snp, big.mark = ","), sm$n_qtn, sm$n_sig, sm$n_sug,
-           sprintf("%.2f", sm$max_lod), fmtp(sm$min_p), sm$n_snp_sig, sm$n_snp_sug,
+           sprintf("%.2f", sm$max_lod), fmtp(sm$min_p), sm$n_snp_sig,
            sprintf("%.3f", sm$lambda), sm$n_genes, sm$n_signals))
 kable(t4, caption = "表 4　全基因组关联结果总体统计", format = "html", row.names = FALSE)
 ```
@@ -228,9 +236,11 @@ kable(t6, caption = "表 6　LOD 最高的 20 个 QTN", format = "html", row.nam
 
 ## 3.4　主峰区域与候选基因
 
-主峰锚点为 `r sm$anchor`（`r sm$anchor_chr` `r sprintf("%.2f", sm$anchor_pos/1e6)` Mb，LOD = `r sprintf("%.2f", q20$lod[1])`）。区域关联图（图 5）给出 ±1 Mb 窗口内各 SNP 的 −log₁₀P 与相对最强单标记的 *r*²，下方为基因模型。
+主峰锚点为 `r sm$anchor`（`r sm$anchor_chr` `r sprintf("%.2f", sm$anchor_pos/1e6)` Mb，LOD = `r sprintf("%.2f", q20$lod[1])`）。所谓“锚点”，是 LOD 最高且能注释到基因的 QTN；以它为中心 ±1 Mb 作为主峰窗口。区域关联图（图 5）给出窗口内各 SNP 的 −log₁₀P 与相对最强单标记的 *r*²，下方为基因模型。
 
 窗口内共 `r sm$n_genes` 个基因（表 8）。按 QTN 数与最高 LOD 排序的前 3 个候选基因见表 7，其中 `r cand$gene_id[1]` 含 `r cand$n_qtn[1]` 个 QTN（最高 LOD = `r sprintf("%.2f", cand$max_lod[1])`），注释为 `r cand$Preferred_name[1]`。
+
+**为什么这样排序？** 一个基因区域内检出的 QTN 越多、最高 LOD 越大，说明该基因附近反复出现与性状相关的信号，因此更可能是因果基因。这是“优先级排序”的经验规则，用于决定先验证谁，并不是因果证明。
 
 ```{r fig5, results='asis'}
 embed_img("f5_locus_zoom.png", sprintf("图 5　%s 主峰区域关联图（%s %.2f–%.2f Mb）。上panel：各 SNP 的 −log₁₀P，颜色表示与区域最强单标记（红色竖虚线）的 r²（5 档）；下panel：基因模型，灰色为其他基因，红色标注为候选基因。", CN, sm$anchor_chr, sm$window_start/1e6, sm$window_end/1e6), 1000)
@@ -264,7 +274,7 @@ cat("</div>")
 
 ## 3.5　区域 QTN 信号
 
-主峰窗口内的 QTN 按 50 kb 去冗余后共 `r nrow(sig)` 个信号（图 6、表 9）。
+主峰窗口内的 QTN 往往成串出现，彼此相距很近、处于同一 LD 区块，实际上代表同一个信号。为避免重复计数，把相距小于 50 kb 的 QTN 合并为一个信号（只保留 LOD 最高者），这一步称为“50 kb 去冗余”。去冗余后共 `r nrow(sig)` 个信号（图 6、表 9）。
 
 ```{r fig6, results='asis'}
 embed_img("f6_qtn_region.png", sprintf("图 6　%s 主峰窗口内 QTN 的 LOD 分布。竖线高度为各 QTN 的 LOD，颜色区分 SIG/SUG；灰色虚线为 LOD 7.7（Bonferroni 阈值）；标注为基因名。", CN), 980)
@@ -285,7 +295,7 @@ if (nrow(sig)) {
 
 ## 3.6　候选基因单倍型
 
-对窗口内候选基因构建单倍型，成功者见表 10 与图 7。
+单倍型指同一条染色体上多个位点的等位基因组合；这里用标签 SNP 的组合来定义，横轴每一类就是一个单倍型。对窗口内候选基因构建单倍型，成功者见表 10 与图 7。
 
 ```{r fig7, results='asis'}
 embed_img("f7_haplotype.png", paste0("图 7　", CN, " 主峰候选基因的单倍型-表型关联。箱线图按单倍型均值升序排列，横轴括号内为样本数；深蓝为频率 ≥ 5% 的高频单倍型，灰色为合并后的低频单倍型（< 5%）；标题下方给出标签 SNP 数与 Kruskal-Wallis p 值。"), 1050)
@@ -299,6 +309,77 @@ if (nrow(hap)) {
   kable(t9, caption = "表 10　候选基因的单倍型关联结果", format = "html", row.names = FALSE)
 } else {
   cat("<p>窗口内候选基因未获得可用单倍型（标签 SNP 不足或频率过低）。</p>")
+}
+```
+
+```{r susie_section, results='asis', echo=FALSE}
+if (has_susie) {
+  cat("\n## 3.7　SuSiE 精细定位（补充分析）\n\n")
+  cat("为独立评估主峰内的信号数目与可信变异，使用个体基因型（in-sample LD）对 chr04a 8.30–10.30 Mb 区间运行 SuSiE（susieR 0.14.2）：表型与基因型先对 3 个 PC 残差化并标准化，L = 10，95% 可信集，纯度阈值 |r| > 0.1。\n\n")
+  cat(sprintf("共得到 **%d 个可信集**（表 11）。\n\n", nrow(scs)))
+  tS1 <- scs[, .(可信集 = CS, 变异数 = size, 代表变异 = top_snp,
+                 位置 = sprintf("%.3f", top_pos / 1e6),
+                 PIP = sprintf("%.3f", top_pip), 最近基因 = top_gene)]
+  setnames(tS1, c("可信集", "变异数", "代表变异", "位置 (Mb)", "PIP", "最近基因"))
+  cat(kable(tS1, caption = "表 11　SuSiE 95% 可信集", format = "html", row.names = FALSE))
+  cat("\n\n")
+  cat(sprintf("区域内 %d 个 Fast3VmrMLM QTN 与可信集在变异层面重合 **%d** 个（表 12）；多位点 QTN 多为同一 LD 块的代理，SuSiE 将其收敛为少数代表变异。\n\n",
+              nrow(sqtl), sum(sqtl$in_cs)))
+  tS2 <- sqtl[, .(标记 = marker, 位置 = sprintf("%.3f", pos / 1e6),
+                  LOD = sprintf("%.2f", lod), 显著性 = significance, 基因 = gene_id,
+                  可信集 = fifelse(is.na(cs), "—", paste0("CS", cs)))]
+  setnames(tS2, c("标记", "位置 (Mb)", "LOD", "显著性", "基因", "可信集"))
+  cat("<div style='max-height:360px;overflow-y:auto'>")
+  cat(kable(tS2, caption = "表 12　区域内 QTN 与 SuSiE 可信集的对应", format = "html", row.names = FALSE))
+  cat("</div>\n\n")
+  fp <- file.path(fig_dir, paste0("susie_", TR), "susie_pip.png")
+  if (file.exists(fp)) {
+    cat(sprintf("<div class='figbox'><img src='%s' style='max-width:1000px;width:100%%'/><div class='figcap'>图 8　%s SuSiE 精细定位。上：区域 −log₁₀P，彩色点为 95%% 可信集变异，红虚线为 Fast3VmrMLM QTN；下：各变异 PIP。</div></div>\n\n",
+                knitr::image_uri(fp), CN))
+  }
+  cat("**解读与局限。** SuSiE 将主峰收敛为两个单变异可信集，CS1 落在 KCS2 `Actnc04aG0088000` 内（PIP ≈ 1.000），CS2 位于 8.87 Mb（PIP ≈ 0.997）；L = 5 与 L = 15 复跑结果一致。需要注意：(1) n = 200 时 PIP 明显过度自信（残差方差估计约 0.50），PIP 只宜作为排序；(2) 最强单标记 `chr04a:9289621` 在 PC 校正下边际 p = 2.2×10⁻¹⁶、与 9525509 联合建模仍显著（p = 3×10⁻⁶），但 SuSiE 给其 PIP 仅 0.02，提示该区可能存在第三个较弱信号，SuSiE 对弱信号偏保守；(3) `chr04a:9681466`（PC 校正 p = 0.03）未获支持。总体上 SuSiE 与条件分析一致地把因果候选锁定在 KCS 簇内，但尚不足以区分 0087600 / 0087700 / 0088000 / 0088300 / 0088400 等旁系同源基因。\n\n")
+}
+```
+
+```{r varanno_section, results='asis', echo=FALSE}
+if (has_va) {
+  cat("\n## 3.8　精细定位变异的位置与基因影响\n\n")
+  cat(sprintf("对可信集与重点候选变异（共 %d 个）按 GFF3 的基因 / 外显子 / CDS / UTR 结构逐一定位：按链方向确定 TSS，TSS 上游 2 kb 内记为启动子，基因体内区分 CDS、5'UTR、3'UTR 与内含子，其余按距离记为基因间；CDS 内变异通过剪接后 CDS 序列翻译比较氨基酸改变。\n\n", nrow(va)))
+  tS3 <- va[, .(变异 = snp, 可信集 = fifelse(cs == "", "—", cs), PIP = sprintf("%.3f", pip),
+                基因 = fifelse(is.na(gene), "—", gene), 位置类别 = region,
+                距TSS = fifelse(is.na(dist_tss_bp), "—", as.character(dist_tss_bp)),
+                剪接距离 = fifelse(is.na(splice_dist_bp), "—", as.character(splice_dist_bp)),
+                密码子 = fifelse(is.na(codon), "—", as.character(codon)),
+                氨基酸改变 = fifelse(is.na(aa_change), "—", as.character(aa_change)),
+                功能注释 = fifelse(is.na(Preferred_name) | Preferred_name == "-", "—", Preferred_name))]
+  setnames(tS3, c("变异", "可信集", "PIP", "基因", "位置类别", "距 TSS (bp)", "剪接距离 (bp)",
+                  "密码子", "氨基酸改变", "功能注释"))
+  cat(kable(tS3, caption = "表 13　精细定位变异的位置与编码影响", format = "html", row.names = FALSE))
+  cat("\n\n")
+  fp2 <- file.path(fig_dir, "variant_annotation", "variant_positions.png")
+  if (file.exists(fp2)) {
+    cat(sprintf("<div class='figbox'><img src='%s' style='max-width:1000px;width:100%%'/><div class='figcap'>图 9　%s 精细定位变异的位置与基因结构。上：KCS 簇（9.36–9.66 Mb）；下：其余三个候选位点。虚线为变异位置，颜色表示位置类别；蓝色方块为外显子。</div></div>\n\n",
+                knitr::image_uri(fp2), CN))
+  }
+  cat("**结果解读。** 候选变异均非编码改变：最强的 CS1 `chr04a:9525509` 位于 KCS2 `Actnc04aG0088000` TSS 上游 1,765 bp（启动子区）；CS2 `chr04a:8874692` 位于 `Actnc04aG0084400` 上游约 3.2 kb（基因间）；`chr04a:9289621` 位于 `Actnc04aG0086800` 内含子（距最近剪接位点 1,143 bp）；`9438505`、`9506503`、`9681466` 均为基因间。r² ≥ 0.8 的代理变异中亦未发现编码变异。因此该主峰更可能是**调控型**而非蛋白改变型：最合理的假设是 `9525509` 所在启动子区影响 KCS2 的转录水平。\n\n")
+  cat("**局限。** 目前没有种子发育期 eQTL、ATAC-seq 或组蛋白修饰数据，2 kb 启动子窗口只是常用近似，不能排除远端增强子或非编码 RNA；变异对表达的方向与幅度仍需 RT-qPCR / 单倍型-表达关联验证。\n\n")
+}
+```
+
+```{r known_section, results='asis', echo=FALSE}
+if (has_known) {
+  gene <- if (!is.null(km) && nrow(km)) km$gene[1] else "候选基因"
+  trkw <- if (!is.null(km) && nrow(km) && nzchar(km$trait[1])) km$trait[1] else "该性状"
+  nhit <- if (!is.null(km) && nrow(km)) km$n_hits[1] else nrow(kd)
+  cat("\n## 3.9　已知位点核对（Europe PMC 文献）\n\n")
+  cat(sprintf("以候选基因的拟南芥/水稻同源基因 **%s** 与关键词 **%s** 检索 Europe PMC，返回 **%s** 篇文献；按引用数排序的前 %d 篇见表 14。\n\n",
+              gene, trkw, nhit, min(10, nrow(kd))))
+  if (nrow(kd) && all(c("pmid", "year", "title", "journal", "cited_by") %in% names(kd))) {
+    kk <- head(kd, 10)[, .(PMID = pmid, 年份 = year, 标题 = title, 期刊 = journal, 引用 = cited_by)]
+    cat(kable(kk, caption = "表 14　Europe PMC 中与该同源基因/性状相关的文献", format = "html", row.names = FALSE))
+    cat("\n\n")
+  }
+  cat("**解读与局限。** 这些是模式物种中的文献证据，说明该基因家族与目标性状有关，并不等于本物种该位点已被验证；同源映射、串联基因拷贝数差异与性状定义差异都会影响解读。未检索到文献也不能作为“新位点”的证据。\n\n")
 }
 ```
 
@@ -361,7 +442,7 @@ if (has_known) {
     文件 = sprintf("results/known_loci/%s_known.tsv", TR),
     内容 = "Europe PMC 文献核对"))
 }
-kable(t10, caption = "表 11　交付文件清单", format = "html", row.names = FALSE)
+kable(t10, caption = "表 15　交付文件清单", format = "html", row.names = FALSE)
 ```
 
 ## 5.2　全部 QTN
@@ -371,78 +452,7 @@ t11 <- qall[, .(基因 = gene_id, 染色体 = chr, 位置 = sprintf("%.3f", pos/
                 标记 = marker, LOD = sprintf("%.2f", lod), 显著性 = significance,
                 功能注释 = fifelse(is.na(Preferred_name) | Preferred_name == "-", "—", Preferred_name))]
 setnames(t11, c("基因", "染色体", "位置 (Mb)", "标记", "LOD", "显著性", "功能注释"))
-kable(t11, caption = sprintf("表 12　全部 %d 个 QTN 及其注释", nrow(qall)), format = "html", row.names = FALSE)
-```
-
-```{r susie_section, results='asis', echo=FALSE}
-if (has_susie) {
-  cat("\n## 5.3　SuSiE 精细定位（补充分析）\n\n")
-  cat("为独立评估主峰内的信号数目与可信变异，使用个体基因型（in-sample LD）对 chr04a 8.30–10.30 Mb 区间运行 SuSiE（susieR 0.14.2）：表型与基因型先对 3 个 PC 残差化并标准化，L = 10，95% 可信集，纯度阈值 |r| > 0.1。\n\n")
-  cat(sprintf("共得到 **%d 个可信集**（表 S1）。\n\n", nrow(scs)))
-  tS1 <- scs[, .(可信集 = CS, 变异数 = size, 代表变异 = top_snp,
-                 位置 = sprintf("%.3f", top_pos / 1e6),
-                 PIP = sprintf("%.3f", top_pip), 最近基因 = top_gene)]
-  setnames(tS1, c("可信集", "变异数", "代表变异", "位置 (Mb)", "PIP", "最近基因"))
-  cat(kable(tS1, caption = "表 S1　SuSiE 95% 可信集", format = "html", row.names = FALSE))
-  cat("\n\n")
-  cat(sprintf("区域内 %d 个 Fast3VmrMLM QTN 与可信集在变异层面重合 **%d** 个（表 S2）；多位点 QTN 多为同一 LD 块的代理，SuSiE 将其收敛为少数代表变异。\n\n",
-              nrow(sqtl), sum(sqtl$in_cs)))
-  tS2 <- sqtl[, .(标记 = marker, 位置 = sprintf("%.3f", pos / 1e6),
-                  LOD = sprintf("%.2f", lod), 显著性 = significance, 基因 = gene_id,
-                  可信集 = fifelse(is.na(cs), "—", paste0("CS", cs)))]
-  setnames(tS2, c("标记", "位置 (Mb)", "LOD", "显著性", "基因", "可信集"))
-  cat("<div style='max-height:360px;overflow-y:auto'>")
-  cat(kable(tS2, caption = "表 S2　区域内 QTN 与 SuSiE 可信集的对应", format = "html", row.names = FALSE))
-  cat("</div>\n\n")
-  fp <- file.path(fig_dir, paste0("susie_", TR), "susie_pip.png")
-  if (file.exists(fp)) {
-    cat(sprintf("<div class='figbox'><img src='%s' style='max-width:1000px;width:100%%'/><div class='figcap'>图 S1　%s SuSiE 精细定位。上：区域 −log₁₀P，彩色点为 95%% 可信集变异，红虚线为 Fast3VmrMLM QTN；下：各变异 PIP。</div></div>\n\n",
-                knitr::image_uri(fp), CN))
-  }
-  cat("**解读与局限。** SuSiE 将主峰收敛为两个单变异可信集，CS1 落在 KCS2 `Actnc04aG0088000` 内（PIP ≈ 1.000），CS2 位于 8.87 Mb（PIP ≈ 0.997）；L = 5 与 L = 15 复跑结果一致。需要注意：(1) n = 200 时 PIP 明显过度自信（残差方差估计约 0.50），PIP 只宜作为排序；(2) 最强单标记 `chr04a:9289621` 在 PC 校正下边际 p = 2.2×10⁻¹⁶、与 9525509 联合建模仍显著（p = 3×10⁻⁶），但 SuSiE 给其 PIP 仅 0.02，提示该区可能存在第三个较弱信号，SuSiE 对弱信号偏保守；(3) `chr04a:9681466`（PC 校正 p = 0.03）未获支持。总体上 SuSiE 与条件分析一致地把因果候选锁定在 KCS 簇内，但尚不足以区分 0087600 / 0087700 / 0088000 / 0088300 / 0088400 等旁系同源基因。\n\n")
-}
-```
-
-```{r varanno_section, results='asis', echo=FALSE}
-if (has_va) {
-  cat("\n## 5.4　精细定位变异的位置与基因影响\n\n")
-  cat(sprintf("对可信集与重点候选变异（共 %d 个）按 GFF3 的基因 / 外显子 / CDS / UTR 结构逐一定位：按链方向确定 TSS，TSS 上游 2 kb 内记为启动子，基因体内区分 CDS、5'UTR、3'UTR 与内含子，其余按距离记为基因间；CDS 内变异通过剪接后 CDS 序列翻译比较氨基酸改变。\n\n", nrow(va)))
-  tS3 <- va[, .(变异 = snp, 可信集 = fifelse(cs == "", "—", cs), PIP = sprintf("%.3f", pip),
-                基因 = fifelse(is.na(gene), "—", gene), 位置类别 = region,
-                距TSS = fifelse(is.na(dist_tss_bp), "—", as.character(dist_tss_bp)),
-                剪接距离 = fifelse(is.na(splice_dist_bp), "—", as.character(splice_dist_bp)),
-                密码子 = fifelse(is.na(codon), "—", as.character(codon)),
-                氨基酸改变 = fifelse(is.na(aa_change), "—", as.character(aa_change)),
-                功能注释 = fifelse(is.na(Preferred_name) | Preferred_name == "-", "—", Preferred_name))]
-  setnames(tS3, c("变异", "可信集", "PIP", "基因", "位置类别", "距 TSS (bp)", "剪接距离 (bp)",
-                  "密码子", "氨基酸改变", "功能注释"))
-  cat(kable(tS3, caption = "表 S3　精细定位变异的位置与编码影响", format = "html", row.names = FALSE))
-  cat("\n\n")
-  fp2 <- file.path(fig_dir, "variant_annotation", "variant_positions.png")
-  if (file.exists(fp2)) {
-    cat(sprintf("<div class='figbox'><img src='%s' style='max-width:1000px;width:100%%'/><div class='figcap'>图 S2　%s 精细定位变异的位置与基因结构。上：KCS 簇（9.36–9.66 Mb）；下：其余三个候选位点。虚线为变异位置，颜色表示位置类别；蓝色方块为外显子。</div></div>\n\n",
-                knitr::image_uri(fp2), CN))
-  }
-  cat("**结果解读。** 候选变异均非编码改变：最强的 CS1 `chr04a:9525509` 位于 KCS2 `Actnc04aG0088000` TSS 上游 1,765 bp（启动子区）；CS2 `chr04a:8874692` 位于 `Actnc04aG0084400` 上游约 3.2 kb（基因间）；`chr04a:9289621` 位于 `Actnc04aG0086800` 内含子（距最近剪接位点 1,143 bp）；`9438505`、`9506503`、`9681466` 均为基因间。r² ≥ 0.8 的代理变异中亦未发现编码变异。因此该主峰更可能是**调控型**而非蛋白改变型：最合理的假设是 `9525509` 所在启动子区影响 KCS2 的转录水平。\n\n")
-  cat("**局限。** 目前没有种子发育期 eQTL、ATAC-seq 或组蛋白修饰数据，2 kb 启动子窗口只是常用近似，不能排除远端增强子或非编码 RNA；变异对表达的方向与幅度仍需 RT-qPCR / 单倍型-表达关联验证。\n\n")
-}
-```
-
-```{r known_section, results='asis', echo=FALSE}
-if (has_known) {
-  gene <- if (!is.null(km) && nrow(km)) km$gene[1] else "候选基因"
-  trkw <- if (!is.null(km) && nrow(km) && nzchar(km$trait[1])) km$trait[1] else "该性状"
-  nhit <- if (!is.null(km) && nrow(km)) km$n_hits[1] else nrow(kd)
-  cat("\n## 5.5　已知位点核对（Europe PMC 文献）\n\n")
-  cat(sprintf("以候选基因的拟南芥/水稻同源基因 **%s** 与关键词 **%s** 检索 Europe PMC，返回 **%s** 篇文献；按引用数排序的前 %d 篇见表 S4。\n\n",
-              gene, trkw, nhit, min(10, nrow(kd))))
-  if (nrow(kd) && all(c("pmid", "year", "title", "journal", "cited_by") %in% names(kd))) {
-    kk <- head(kd, 10)[, .(PMID = pmid, 年份 = year, 标题 = title, 期刊 = journal, 引用 = cited_by)]
-    cat(kable(kk, caption = "表 S4　Europe PMC 中与该同源基因/性状相关的文献", format = "html", row.names = FALSE))
-    cat("\n\n")
-  }
-  cat("**解读与局限。** 这些是模式物种中的文献证据，说明该基因家族与目标性状有关，并不等于本物种该位点已被验证；同源映射、串联基因拷贝数差异与性状定义差异都会影响解读。未检索到文献也不能作为“新位点”的证据。\n\n")
-}
+kable(t11, caption = sprintf("表 16　全部 %d 个 QTN 及其注释", nrow(qall)), format = "html", row.names = FALSE)
 ```
 
 <div class="small">
