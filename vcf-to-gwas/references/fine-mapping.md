@@ -50,8 +50,8 @@ unnecessary (LD is in-sample).
    are absorbed and PIPs distort. Re-run with `L = 5, 10, 15` and check
    stability (this skill's default check).
 3. **LD mismatch** — see diagnostics above.
-4. **HLA / long-range LD** — excluded or masked; not applicable to most plant
-   loci but watch tandem gene clusters (e.g. KCS arrays).
+4. **Long-range LD / tandem gene clusters** — e.g. KCS/FAE1 arrays; check
+   whether the credible set spans several paralogs before naming one causal gene.
 5. **PIP ≠ posterior probability at low N** — calibrate expectations; report
    the credible set, not just the top SNP.
 

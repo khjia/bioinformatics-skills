@@ -2,7 +2,7 @@
 
 VCF → plink2 质控 / LD 剪枝 / PCA → Fast3VmrMLM 多位点 GWAS → QTN 注释
 → 每个性状一份 HTML 报告（Manhattan/QQ、主峰区域、±1 Mb 全部基因、区域 QTN、单倍型）
-→ 可选 SuSiE 精细定位 → 可选 GWAS Catalog 已知位点查询。
+→ 可选 SuSiE 精细定位 → 可选 Europe PMC 文献核对。
 
 ## 目录
 
@@ -20,13 +20,13 @@ vcf-to-gwas/
 │   ├── 21_trait_report.Rmd     # 报告模板（含 SuSiE/变异位置补充章节）
 │   ├── 22_render_all.R         # 批量渲染
 │   ├── 23_finemap_susie.R      # SuSiE 精细定位（个体基因型、in-sample LD）
-│   ├── 26_known_loci.py        # GWAS Catalog 已知位点查询
+│   ├── 26_known_loci.py        # Europe PMC 文献核对
 │   ├── 00_config.example.R     # 报告/精细定位配置模板
 │   ├── pipeline.env.example    # 流程环境变量模板
 │   └── run_all.sh              # 一键串联（RUN_REPORTS=1 时含报告）
 └── references/
     ├── fine-mapping.md         # SuSiE/FINEMAP 选择、LD 诊断、坑点
-    ├── known-loci.md           # GWAS Catalog / 跨物种查询注意事项
+    ├── known-loci.md           # 植物同源基因与文献核对注意事项
     └── pitfalls.md             # 全流程实测坑点
 ```
 

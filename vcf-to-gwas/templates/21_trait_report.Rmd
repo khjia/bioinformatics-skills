@@ -54,10 +54,14 @@ VADIR <- file.path(res_dir, "variant_annotation")
 has_va <- file.exists(file.path(VADIR, paste0(TR, "_variant_annotation.tsv")))
 if (has_va) va <- fread(file.path(VADIR, paste0(TR, "_variant_annotation.tsv")))
 
-## optional known-locus lookup (GWAS Catalog)
+## optional known-locus lookup (Europe PMC)
 KDIR <- file.path(res_dir, "known_loci")
 has_known <- file.exists(file.path(KDIR, paste0(TR, "_known.tsv")))
-if (has_known) kd <- fread(file.path(KDIR, paste0(TR, "_known.tsv")))
+if (has_known) {
+  kd <- fread(file.path(KDIR, paste0(TR, "_known.tsv")))
+  km <- if (file.exists(file.path(KDIR, paste0(TR, "_meta.tsv"))))
+    fread(file.path(KDIR, paste0(TR, "_meta.tsv"))) else NULL
+}
 
 embed_img <- function(f, cap, width = 1000) {
   p <- file.path(FIGD, f)
@@ -355,7 +359,7 @@ if (has_va) {
 if (has_known) {
   t10 <- rbind(t10, data.table(
     文件 = sprintf("results/known_loci/%s_known.tsv", TR),
-    内容 = "GWAS Catalog 已知位点查询"))
+    内容 = "Europe PMC 文献核对"))
 }
 kable(t10, caption = "表 11　交付文件清单", format = "html", row.names = FALSE)
 ```
@@ -426,16 +430,18 @@ if (has_va) {
 
 ```{r known_section, results='asis', echo=FALSE}
 if (has_known) {
-  cat("\n## 5.5　已知位点核对（GWAS Catalog）\n\n")
-  cat(sprintf("以 KCS 簇的拟南芥同源基因 **AT5G43760（KCS19）** 查询 NHGRI-EBI GWAS Catalog（v2 API，`mapped_gene`），返回 **%d** 条关联记录。\n\n", nrow(kd)))
-  if (nrow(kd)) {
-    cat(kable(kd, caption = "表 S4　GWAS Catalog 中与查询基因相关的关联", format = "html", row.names = FALSE))
+  gene <- if (!is.null(km) && nrow(km)) km$gene[1] else "候选基因"
+  trkw <- if (!is.null(km) && nrow(km) && nzchar(km$trait[1])) km$trait[1] else "该性状"
+  nhit <- if (!is.null(km) && nrow(km)) km$n_hits[1] else nrow(kd)
+  cat("\n## 5.5　已知位点核对（Europe PMC 文献）\n\n")
+  cat(sprintf("以候选基因的拟南芥/水稻同源基因 **%s** 与关键词 **%s** 检索 Europe PMC，返回 **%s** 篇文献；按引用数排序的前 %d 篇见表 S4。\n\n",
+              gene, trkw, nhit, min(10, nrow(kd))))
+  if (nrow(kd) && all(c("pmid", "year", "title", "journal", "cited_by") %in% names(kd))) {
+    kk <- head(kd, 10)[, .(PMID = pmid, 年份 = year, 标题 = title, 期刊 = journal, 引用 = cited_by)]
+    cat(kable(kk, caption = "表 S4　Europe PMC 中与该同源基因/性状相关的文献", format = "html", row.names = FALSE))
     cat("\n\n")
-  } else {
-    cat("即人类 Catalog 中无该位点的直接记录。\n\n")
   }
-  cat("补充查询：人 **ELOVL6**（KCS 类脂肪酸延长酶的功能同源基因）在 Catalog 中的关联均为血细胞性状（嗜碱性粒细胞比例、血小板计数），与脂质或种子油性状无关。\n\n")
-  cat("**解读。** Catalog 只收录人类 GWAS，非模式植物不在覆盖范围内，因此“无记录”不能作为新位点的证据；FAE1/KCS 家族在拟南芥、甘蓝型油菜等作物中对超长链脂肪酸组成与种子油性状的作用已有大量遗传与功能研究，可作为本候选簇的旁证。\n\n")
+  cat("**解读与局限。** 这些是模式物种中的文献证据，说明该基因家族与目标性状有关，并不等于本物种该位点已被验证；同源映射、串联基因拷贝数差异与性状定义差异都会影响解读。未检索到文献也不能作为“新位点”的证据。\n\n")
 }
 ```
 

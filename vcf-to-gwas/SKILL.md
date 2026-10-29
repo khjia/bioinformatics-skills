@@ -1,6 +1,6 @@
 ---
 name: vcf-to-gwas
-description: End-to-end pipeline from a VCF to a Fast3VmrMLM GWAS and per-trait HTML reports — PLINK QC, LD pruning, PCA, Fast3VmrMLM input files, multi-locus GWAS, nearest-gene QTN annotation, Manhattan/QQ, main-peak locus zoom, the full ±1 Mb gene list, regional QTN signals, haplotype boxplots, optional SuSiE fine-mapping with LD diagnostics, and known-locus lookup in the GWAS Catalog. Use when the user asks 从 VCF 做 GWAS, 跑 Fast3VmrMLM, 做 PCA/群体结构, 注释 QTN, 单性状 GWAS 报告, 主峰基因列表, 批量性状报告, 精细定位/SuSiE, or 查已知位点.
+description: End-to-end pipeline from a VCF to a Fast3VmrMLM GWAS and per-trait HTML reports — PLINK QC, LD pruning, PCA, Fast3VmrMLM input files, multi-locus GWAS, nearest-gene QTN annotation, Manhattan/QQ, main-peak locus zoom, the full ±1 Mb gene list, regional QTN signals, haplotype boxplots, optional SuSiE fine-mapping with LD diagnostics, and a plant known-locus literature check via Europe PMC. Use when the user asks 从 VCF 做 GWAS, 跑 Fast3VmrMLM, 做 PCA/群体结构, 注释 QTN, 单性状 GWAS 报告, 主峰基因列表, 批量性状报告, 精细定位/SuSiE, or 查已知位点.
 ---
 
 # VCF → GWAS → per-trait reports
@@ -61,7 +61,7 @@ RUN_REPORTS=1 bash templates/run_all.sh            # or run only 22_render_all.R
 # Phase C: fine-mapping (individual-level SuSiE, in-sample LD)
 Rscript templates/23_finemap_susie.R fa fa_C24_1
 
-# Phase D: known-locus lookup (GWAS Catalog)
+# Phase D: known-locus lookup (Europe PMC)
 python3 templates/26_known_loci.py --gene AT5G43760 --out known_kcs.tsv
 ```
 
@@ -189,19 +189,21 @@ Rscript templates/23_finemap_susie.R fa fa_C24_1
   `lambda > 0.05` means the LD reference does not match the cohort.
 - Full guidance and pitfalls: `references/fine-mapping.md`.
 
-# Phase D — Known-locus lookup (optional)
+# Phase D — Known-locus lookup (optional, plant literature)
 
-Before claiming novelty, check the NHGRI-EBI GWAS Catalog (human) or the
-orthologous gene in the literature.
+Before claiming novelty, map the candidate to its Arabidopsis/rice ortholog and
+search the literature for that gene and the trait. No curated plant-wide
+association catalog exists for this purpose.
 
 ```bash
-python3 templates/26_known_loci.py --rsid rs7903146 --out known.tsv
-python3 templates/26_known_loci.py --gene AT5G43760 --out known_kcs.tsv
+python3 templates/26_known_loci.py --gene AT5G43760 \
+    --trait "fatty acid seed oil" --out known.tsv --meta known_meta.tsv
 ```
 
-For non-model plants the Catalog is human-only: map the candidate to its
-Arabidopsis/rice ortholog and treat hits as hypotheses. See
-`references/known-loci.md`.
+The script queries Europe PMC, sorts by citation count, and writes a paper
+table plus a metadata row (gene, trait, hit count). Treat hits as
+hypothesis-generating evidence from model species, not as validation. See
+`references/known-loci.md` for AraPheno, 1001 Genomes and Ensembl Plants.
 
 ## Method notes (keep consistent)
 

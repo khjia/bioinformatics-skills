@@ -1,59 +1,51 @@
-# Known-locus lookup (GWAS Catalog and friends)
+# Known-locus check for plants (ortholog + literature)
 
-Companion to `templates/26_known_loci.py`. Distilled from the davila7
-`gwas-database` skill (GWAS Catalog REST) and the ClawBio `gwas-lookup`
-concept (federated variant query).
+Companion to `templates/26_known_loci.py`. There is no plant equivalent of the
+human GWAS Catalog, so the practical check is: map the candidate to its
+Arabidopsis/rice ortholog, then search the literature for that gene and the
+trait.
 
-## When to use it
+## What the script does
 
-Before writing "novel locus", check whether the variant, gene or region has
-already been reported. This is a literature/annotation step — it does **not**
-run an association test.
-
-## GWAS Catalog REST (human)
+`26_known_loci.py` queries **Europe PMC** with `<gene> AND (<trait keywords>)`,
+sorts by citation count, and writes a TSV of papers plus an optional metadata
+row (gene, trait, hit count, source).
 
 ```bash
-# by rsID
-python3 templates/26_known_loci.py --rsid rs7903146 --out known_rs.tsv
-
-# by gene symbol
-python3 templates/26_known_loci.py --gene APOE --out known_apoe.tsv
+python3 templates/26_known_loci.py \
+  --gene AT5G43760 \
+  --trait "fatty acid seed oil" \
+  --out known.tsv --meta known_meta.tsv --max 20
 ```
 
-Endpoints (no authentication, ~0.2 s between requests):
+Output columns: `pmid, doi, year, title, journal, first_author, cited_by`.
 
-- `https://www.ebi.ac.uk/gwas/rest/api/v2/associations?rs_id={rsid}`
-- `https://www.ebi.ac.uk/gwas/rest/api/v2/associations?mapped_gene={SYMBOL}`
-- Summary statistics: `https://www.ebi.ac.uk/gwas/summary-statistics/api/...`
+## Plant sources worth using
 
-Output columns: `rsid, traits, genes, pvalue, or_beta, risk_allele, study`.
+| Source | Use | Access |
+|---|---|---|
+| Europe PMC | literature by ortholog + trait | REST, no key |
+| AraPheno | Arabidopsis phenotype/GWAS records | web/API, phenotype-centric |
+| 1001 Genomes | Arabidopsis natural variation / GWAS | web portal |
+| Ensembl Plants | orthologs, gene models, sequences | BioMart / REST |
+| Gramene | comparative grass genomics, QTL | web |
+| Brassica / rice QTL literature | seed oil / fatty acid QTL | Europe PMC |
 
-## Non-model plants (this project)
+## How to read the result
 
-The Catalog is human-only. Practical workflow:
+- A hit means "this gene family has been studied for this trait in a model
+  species", **not** that the locus is validated in *Acer truncatum*.
+- Ortholog mapping is imperfect: tandem KCS/FAE1 arrays often have
+  species-specific copy numbers; one Arabidopsis gene may map to several
+  paralogs.
+- Trait mismatch matters: seed oil content, fatty-acid composition and VLCFA
+  elongation are related but distinct.
+- Absence of papers is weak evidence of novelty; negative results are rarely
+  published.
 
-1. Take the candidate gene (e.g. `Actnc04aG0088000`).
-2. Map to its Arabidopsis ortholog (already in the annotation file:
-   `AT5G43760`, KCS19).
-3. Query the Catalog with the ortholog symbol, or search literature
-   (PubMed/Europe PMC) for the gene family + trait (e.g. "KCS VLCFA seed oil").
-4. Treat any hit as a **hypothesis**, not validation: ortholog, trait and
-   population differ.
+## Recommended wording in a manuscript
 
-For cross-species variant lookup, Ensembl Plants / Gramene and the
-Arabidopsis 1001 Genomes portal are more useful than the human Catalog.
-
-## Federated lookup (optional)
-
-ClawBio's `gwas-lookup` queries gnomAD, ClinVar, Open Targets, GTEx, LDlink
-and others for a single rsID. Useful for human data; for plants only GTEx-like
-or expression atlases apply, and most do not cover Acer truncatum.
-
-## Interpretation cautions
-
-- **Trait mismatch**: a lipid GWAS hit for LDL cholesterol is not evidence for
-  seed fatty-acid composition.
-- **LD, not causality**: Catalog associations are lead SNPs; the causal variant
-  may be a proxy.
-- **Ancestry**: effect sizes and even lead variants differ across ancestries.
-- **Publication bias**: absence from the Catalog is not evidence of novelty.
+"The candidate region contains a cluster of KCS/FAE1-like elongases
+(orthologous to Arabidopsis AT5G43760); members of this family have been
+associated with very-long-chain fatty acid and seed-oil traits in Arabidopsis
+and Brassica (refs). No association has been reported for *Acer truncatum*."
