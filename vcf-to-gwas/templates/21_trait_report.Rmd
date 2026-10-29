@@ -54,6 +54,11 @@ VADIR <- file.path(res_dir, "variant_annotation")
 has_va <- file.exists(file.path(VADIR, paste0(TR, "_variant_annotation.tsv")))
 if (has_va) va <- fread(file.path(VADIR, paste0(TR, "_variant_annotation.tsv")))
 
+## optional known-locus lookup (GWAS Catalog)
+KDIR <- file.path(res_dir, "known_loci")
+has_known <- file.exists(file.path(KDIR, paste0(TR, "_known.tsv")))
+if (has_known) kd <- fread(file.path(KDIR, paste0(TR, "_known.tsv")))
+
 embed_img <- function(f, cap, width = 1000) {
   p <- file.path(FIGD, f)
   if (!file.exists(p)) {
@@ -347,6 +352,11 @@ if (has_va) {
              "figures/variant_annotation/variant_positions.png"),
     内容 = c("变异位置注释", "变异位置与基因结构图")))
 }
+if (has_known) {
+  t10 <- rbind(t10, data.table(
+    文件 = sprintf("results/known_loci/%s_known.tsv", TR),
+    内容 = "GWAS Catalog 已知位点查询"))
+}
 kable(t10, caption = "表 11　交付文件清单", format = "html", row.names = FALSE)
 ```
 
@@ -411,6 +421,21 @@ if (has_va) {
   }
   cat("**结果解读。** 候选变异均非编码改变：最强的 CS1 `chr04a:9525509` 位于 KCS2 `Actnc04aG0088000` TSS 上游 1,765 bp（启动子区）；CS2 `chr04a:8874692` 位于 `Actnc04aG0084400` 上游约 3.2 kb（基因间）；`chr04a:9289621` 位于 `Actnc04aG0086800` 内含子（距最近剪接位点 1,143 bp）；`9438505`、`9506503`、`9681466` 均为基因间。r² ≥ 0.8 的代理变异中亦未发现编码变异。因此该主峰更可能是**调控型**而非蛋白改变型：最合理的假设是 `9525509` 所在启动子区影响 KCS2 的转录水平。\n\n")
   cat("**局限。** 目前没有种子发育期 eQTL、ATAC-seq 或组蛋白修饰数据，2 kb 启动子窗口只是常用近似，不能排除远端增强子或非编码 RNA；变异对表达的方向与幅度仍需 RT-qPCR / 单倍型-表达关联验证。\n\n")
+}
+```
+
+```{r known_section, results='asis', echo=FALSE}
+if (has_known) {
+  cat("\n## 5.5　已知位点核对（GWAS Catalog）\n\n")
+  cat(sprintf("以 KCS 簇的拟南芥同源基因 **AT5G43760（KCS19）** 查询 NHGRI-EBI GWAS Catalog（v2 API，`mapped_gene`），返回 **%d** 条关联记录。\n\n", nrow(kd)))
+  if (nrow(kd)) {
+    cat(kable(kd, caption = "表 S4　GWAS Catalog 中与查询基因相关的关联", format = "html", row.names = FALSE))
+    cat("\n\n")
+  } else {
+    cat("即人类 Catalog 中无该位点的直接记录。\n\n")
+  }
+  cat("补充查询：人 **ELOVL6**（KCS 类脂肪酸延长酶的功能同源基因）在 Catalog 中的关联均为血细胞性状（嗜碱性粒细胞比例、血小板计数），与脂质或种子油性状无关。\n\n")
+  cat("**解读。** Catalog 只收录人类 GWAS，非模式植物不在覆盖范围内，因此“无记录”不能作为新位点的证据；FAE1/KCS 家族在拟南芥、甘蓝型油菜等作物中对超长链脂肪酸组成与种子油性状的作用已有大量遗传与功能研究，可作为本候选簇的旁证。\n\n")
 }
 ```
 

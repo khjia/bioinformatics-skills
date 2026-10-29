@@ -1,50 +1,55 @@
 #!/usr/bin/env python3
-"""26_known_loci.py ---- look up known associations in the NHGRI-EBI GWAS Catalog.
+"""26_known_loci.py ---- look up known associations in the NHGRI-EBI GWAS Catalog (v2 API).
 
 Human-centric: use rsIDs or human gene symbols. For non-model plants, query the
 orthologous Arabidopsis/rice gene symbol and treat hits as hypothesis-generating.
 
 Usage:
   python3 26_known_loci.py --rsid rs7903146 --out known.tsv
-  python3 26_known_loci.py --gene APOE --out known.tsv
-  python3 26_known_loci.py --gene KCS19 --out known.tsv --max 50
+  python3 26_known_loci.py --gene ELOVL6 --out known.tsv --max 50
 """
 import argparse
 import json
 import sys
-import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE = "https://www.ebi.ac.uk/gwas/rest/api"
-UA = {"User-Agent": "gwas-known-loci/1.0"}
+BASE = "https://www.ebi.ac.uk/gwas/rest/api/v2"
+UA = {"User-Agent": "gwas-known-loci/1.1"}
 
 
 def get(url):
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 410:
+            sys.exit("GWAS Catalog v1 API is retired; this script uses v2 "
+                     "(https://www.ebi.ac.uk/gwas/rest/api/v2).")
+        raise
 
 
-def assoc_rows(a):
-    rows = []
-    for ass in a.get("associations", []):
-        loci = ass.get("loci", [])
-        genes = []
-        for l in loci:
-            for g in l.get("authorReportedGenes", []) or []:
-                genes.append(g.get("geneName", ""))
-        traits = [t.get("trait", "") for t in ass.get("efoTraits", []) or []]
-        rows.append({
-            "rsid": (ass.get("snps", [{}])[0].get("rsId", "") if ass.get("snps") else ""),
+def rows_from(payload):
+    out = []
+    for a in payload.get("_embedded", {}).get("associations", []):
+        rsids = [x.get("rs_id", "") for x in a.get("snp_allele", []) or []]
+        traits = [t.get("efo_trait", "") for t in a.get("efo_traits", []) or []]
+        if not traits:
+            traits = a.get("reported_trait", []) or []
+        out.append({
+            "rsid": ";".join([x for x in rsids if x]),
             "traits": ";".join([t for t in traits if t]),
-            "genes": ";".join([g for g in genes if g]),
-            "pvalue": ass.get("pvalue", ""),
-            "or_beta": ass.get("orPerCopyNum") or ass.get("betaNum") or "",
-            "risk_allele": ass.get("riskAlleleName", ""),
-            "study": ass.get("study", {}).get("accessionId", ""),
+            "genes": ";".join(a.get("mapped_genes", []) or []),
+            "pvalue": a.get("p_value", ""),
+            "beta": a.get("beta", ""),
+            "risk_allele": ";".join(a.get("snp_effect_allele", []) or []),
+            "study": a.get("accession_id", ""),
+            "pmid": a.get("pubmed_id", ""),
+            "author": a.get("first_author", ""),
         })
-    return rows
+    return out
 
 
 def main():
@@ -57,22 +62,13 @@ def main():
     if not (a.rsid or a.gene):
         sys.exit("provide --rsid or --gene")
 
-    rows = []
     if a.rsid:
-        url = f"{BASE}/singleNucleotidePolymorphisms/{urllib.parse.quote(a.rsid)}/associations"
-        rows = assoc_rows(get(url))
+        url = f"{BASE}/associations?rs_id={urllib.parse.quote(a.rsid)}&size={a.max}"
     else:
-        url = (f"{BASE}/singleNucleotidePolymorphisms/search/findByGene"
-               f"?geneName={urllib.parse.quote(a.gene)}&size={a.max}")
-        d = get(url)
-        for snp in d.get("_embedded", {}).get("singleNucleotidePolymorphisms", []):
-            time.sleep(0.2)
-            try:
-                rows += assoc_rows(get(f"{BASE}/singleNucleotidePolymorphisms/{snp['rsId']}/associations"))
-            except Exception as e:
-                print("skip", snp.get("rsId"), e, file=sys.stderr)
+        url = f"{BASE}/associations?mapped_gene={urllib.parse.quote(a.gene)}&size={a.max}"
+    rows = rows_from(get(url))
 
-    cols = ["rsid", "traits", "genes", "pvalue", "or_beta", "risk_allele", "study"]
+    cols = ["rsid", "traits", "genes", "pvalue", "beta", "risk_allele", "study", "pmid", "author"]
     with open(a.out, "w", encoding="utf-8") as fh:
         fh.write("\t".join(cols) + "\n")
         for r in rows[: a.max]:

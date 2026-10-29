@@ -22,8 +22,8 @@ python3 templates/26_known_loci.py --gene APOE --out known_apoe.tsv
 
 Endpoints (no authentication, ~0.2 s between requests):
 
-- `https://www.ebi.ac.uk/gwas/rest/api/singleNucleotidePolymorphisms/{rsid}/associations`
-- `https://www.ebi.ac.uk/gwas/rest/api/singleNucleotidePolymorphisms/search/findByGene?geneName=...`
+- `https://www.ebi.ac.uk/gwas/rest/api/v2/associations?rs_id={rsid}`
+- `https://www.ebi.ac.uk/gwas/rest/api/v2/associations?mapped_gene={SYMBOL}`
 - Summary statistics: `https://www.ebi.ac.uk/gwas/summary-statistics/api/...`
 
 Output columns: `rsid, traits, genes, pvalue, or_beta, risk_allele, study`.
