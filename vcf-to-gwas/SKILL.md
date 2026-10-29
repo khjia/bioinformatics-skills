@@ -1,6 +1,6 @@
 ---
 name: vcf-to-gwas
-description: End-to-end pipeline from a VCF to a Fast3VmrMLM GWAS and per-trait HTML reports — PLINK QC, LD pruning, PCA, Fast3VmrMLM input files, multi-locus GWAS, nearest-gene QTN annotation, then Manhattan/QQ, main-peak locus zoom, the full ±1 Mb gene list, regional QTN signals, and haplotype boxplots. Use when the user asks 从 VCF 做 GWAS, 跑 Fast3VmrMLM, 做 PCA/群体结构, 注释 QTN, 单性状 GWAS 报告, 主峰基因列表, or 批量性状报告.
+description: End-to-end pipeline from a VCF to a Fast3VmrMLM GWAS and per-trait HTML reports — PLINK QC, LD pruning, PCA, Fast3VmrMLM input files, multi-locus GWAS, nearest-gene QTN annotation, Manhattan/QQ, main-peak locus zoom, the full ±1 Mb gene list, regional QTN signals, haplotype boxplots, optional SuSiE fine-mapping with LD diagnostics, and known-locus lookup in the GWAS Catalog. Use when the user asks 从 VCF 做 GWAS, 跑 Fast3VmrMLM, 做 PCA/群体结构, 注释 QTN, 单性状 GWAS 报告, 主峰基因列表, 批量性状报告, 精细定位/SuSiE, or 查已知位点.
 ---
 
 # VCF → GWAS → per-trait reports
@@ -37,10 +37,13 @@ Reference dataset: Yuanbaofeng, 200 samples, 2,494,579 SNPs on 13 chromosomes.
   06.Fast3VmrMLM/report/qtl_annotated.tsv
   09.postgwas2/
     data/gene_coords.rds
-    scripts/{00_config.R, 20_trait_report_figs.R, 22_render_all.R}
+    scripts/{00_config.R, 20_trait_report_figs.R, 22_render_all.R,
+             23_finemap_susie.R, 26_known_loci.py}
     report/{21_trait_report.Rmd, *.html}
     results/<prefix>_<trait>_report/*.tsv
+    results/susie_<trait>/{credible_sets,pip,qtl_overlap}.tsv
     figures/<prefix>_<trait>_report/*.png
+    figures/susie_<trait>/susie_pip.png
 ```
 
 ## Quick start
@@ -54,6 +57,12 @@ bash templates/run_all.sh
 
 # Phase B (after creating 09.postgwas2/scripts/00_config.R)
 RUN_REPORTS=1 bash templates/run_all.sh            # or run only 22_render_all.R
+
+# Phase C: fine-mapping (individual-level SuSiE, in-sample LD)
+Rscript templates/23_finemap_susie.R fa fa_C24_1
+
+# Phase D: known-locus lookup (GWAS Catalog)
+python3 templates/26_known_loci.py --gene AT5G43760 --out known_kcs.tsv
 ```
 
 Individual steps read the same env vars:
@@ -160,6 +169,40 @@ grep -c "OK$" logs_batch_report.log
 |   |   | 11 | Deliverables |
 |   |   | 12 | All QTN |
 
+# Phase C — Fine-mapping (optional)
+
+Use after Phase A when a peak needs credible sets. Individual-level SuSiE with
+in-sample LD is the default; summary-statistics mode needs an LD reference.
+
+```bash
+export GWAS_WDIR=/path/to/09.postgwas2
+Rscript templates/23_finemap_susie.R fa fa_C24_1
+# outputs: results/susie_fa_C24_1/{credible_sets,pip,qtl_overlap,summary}
+#          figures/susie_fa_C24_1/susie_pip.png
+```
+
+- Region = anchor QTN ±1 Mb (`SUSIE_HALF_MB`), `L = 10` (`SUSIE_L`).
+- Report `coverage = 0.9` at low N and say so; PIPs are rankings, not
+  calibrated probabilities.
+- Re-run with `L = 5` and `L = 15` to check stability.
+- For summary statistics, run `susie_rss()` and `estimate_s_rss()` first;
+  `lambda > 0.05` means the LD reference does not match the cohort.
+- Full guidance and pitfalls: `references/fine-mapping.md`.
+
+# Phase D — Known-locus lookup (optional)
+
+Before claiming novelty, check the NHGRI-EBI GWAS Catalog (human) or the
+orthologous gene in the literature.
+
+```bash
+python3 templates/26_known_loci.py --rsid rs7903146 --out known.tsv
+python3 templates/26_known_loci.py --gene AT5G43760 --out known_kcs.tsv
+```
+
+For non-model plants the Catalog is human-only: map the candidate to its
+Arabidopsis/rice ortholog and treat hits as hypotheses. See
+`references/known-loci.md`.
+
 ## Method notes (keep consistent)
 
 - **Anchor** = highest-LOD QTN with a gene annotation (fallbacks: highest-LOD
@@ -186,70 +229,3 @@ See `references/pitfalls.md`: encoding/BOM, Windows filename corruption from
 tar/zip, `sprintf` and `%`, bare `+`/`-` table cells becoming markdown lists,
 `results='asis'` for scroll tables, the `--geno` fallback, TBB/`.so`, and
 ggrepel label placement.
-
-## Citations
-
-**Fast3VmrMLM (GWAS engine)**
-Wang J, Chen Y, Shu G, Zhao M, Zheng A, Chang X, Li G, Wang Y, Zhang Y-M.
-Fast3VmrMLM: a fast algorithm that integrates genome-wide scanning with
-machine learning to accelerate gene mining and breeding by design for
-polygenic traits in large-scale GWAS datasets. *Plant Communications*.
-2025;6(7):101385. doi:10.1016/j.xplc.2025.101385
-
-**3VmrMLM (underlying multi-locus model)**
-Li M, Zhang Y-W, Zhang Z, et al. A compressed variance component mixed model
-for detecting QTNs and QTN-by-environment and QTN-by-QTN interactions in
-genome-wide association studies. *Molecular Plant*. 2022;15(4):630–650.
-doi:10.1016/j.molp.2022.02.012
-
-**PLINK**
-Chang CC, Chow CC, Tellier LC, Vattikuti S, Purcell SM, Lee JJ.
-Second-generation PLINK: rising to the challenge of larger and richer
-datasets. *GigaScience*. 2015;4:7. doi:10.1186/s13742-015-0047-8
-
-**R packages**
-Wickham H. *ggplot2: Elegant Graphics for Data Analysis*. 2nd ed. Springer; 2016.
-Dowle M, Srinivasan A. *data.table: Extension of data.frame*. R package.
-Xie Y. *Dynamic Documents with R and knitr*. 2nd ed. Chapman & Hall/CRC; 2015.
-Xie Y, Allaire JJ, Grolemund G. *R Markdown: The Definitive Guide*. Chapman & Hall/CRC; 2018.
-
-```bibtex
-@article{wang2025fast3vmrmlm,
-  title   = {Fast3VmrMLM: a fast algorithm that integrates genome-wide scanning with machine learning to accelerate gene mining and breeding by design for polygenic traits in large-scale GWAS datasets},
-  author  = {Wang, Jingtian and Chen, Ying and Shu, Guoping and Zhao, Miaomiao and Zheng, Ao and Chang, Xiaoyu and Li, Guiqi and Wang, Yibo and Zhang, Yuan-Ming},
-  journal = {Plant Communications},
-  volume  = {6}, number = {7}, pages = {101385}, year = {2025},
-  doi     = {10.1016/j.xplc.2025.101385}
-}
-@article{li2022compressed,
-  title   = {A compressed variance component mixed model for detecting QTNs and QTN-by-environment and QTN-by-QTN interactions in genome-wide association studies},
-  author  = {Li, Meiyue and Zhang, Ya-Wen and Zhang, Zhen and others},
-  journal = {Molecular Plant},
-  volume  = {15}, number = {4}, pages = {630--650}, year = {2022},
-  doi     = {10.1016/j.molp.2022.02.012}
-}
-@article{chang2015plink,
-  title   = {Second-generation PLINK: rising to the challenge of larger and richer datasets},
-  author  = {Chang, Christopher C and Chow, Carson C and Tellier, Laurent CAM and Vattikuti, Shashaank and Purcell, Shaun M and Lee, James J},
-  journal = {GigaScience},
-  volume  = {4}, pages = {7}, year = {2015},
-  doi     = {10.1186/s13742-015-0047-8}
-}
-@book{wickham2016ggplot2,
-  title     = {ggplot2: Elegant Graphics for Data Analysis},
-  author    = {Wickham, Hadley},
-  edition   = {2nd},
-  publisher = {Springer},
-  year      = {2016}
-}
-```
-
-**Methods template**
-
-"Genome-wide association analysis was performed with Fast3VmrMLM v2.0
-(Wang et al., 2025) on 2,494,579 biallelic SNPs, using the first three
-principal components as covariates. Variants with LOD ≥ 7.7 (Bonferroni
-p = 2.0 × 10⁻⁸) were declared significantly associated; 3 < LOD < 7.7 were
-considered suggestive. Regional signals were summarised from the multi-locus
-QTN output after 50-kb pruning, and haplotype association used tag SNPs
-(p < 0.05, r² < 0.8) tested by Kruskal-Wallis and ANOVA."
