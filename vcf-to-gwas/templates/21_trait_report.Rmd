@@ -224,6 +224,19 @@ kable(t4, caption = "表 4　全基因组关联结果总体统计", format = "ht
 
 **表 4 解读。** 这是全基因组结果的“总账”：有效 SNP 是参与检验的标记数；QTN 是模型判定的位点总数；SIG/SUG 是强弱分级；最高 LOD 是最强证据；最小 p 是单点检验的最小值；λ_GC 是膨胀系数；最后两行对应后文的主峰基因数与区域信号数。
 
+```{r qtn_snp_link, include=FALSE}
+midq <- fread(file.path(if (PREFIX == "fa") file.path(proj, "06.Fast3VmrMLM/results") else vee_mid_dir,
+                        paste0(TR, "_midresult.csv")))
+setnames(midq, c("snp", "chr", "pos", "w", "p"))
+sig_snp <- midq[p < 0.05 / 2494579, snp]
+qtn_p <- midq$p[match(qall$marker, midq$snp)]
+n_qtn_sig <- sum(!is.na(qtn_p) & qtn_p < 0.05 / 2494579)
+n_qtn_ns  <- sum(is.na(qtn_p) | qtn_p >= 0.05 / 2494579)
+n_sig_qtn <- sum(sig_snp %in% qall$marker)
+```
+
+**为什么“654 个显著 SNP”只有“92 个 QTN”？** 这两个数不是一回事。654 是**单标记检验**中 *p* < 2×10⁻⁸ 的 SNP 个数，这些 SNP 彼此高度连锁，很多只是同一信号的“代理”，会重复计数；92 是 Fast3VmrMLM **多位点模型**筛选出的 QTN，一个信号通常只保留一个代表标记，所以数目少得多。两者也不互相包含：本数据中 92 个 QTN 只有 `r n_qtn_sig` 个的单标记 *p* < 2×10⁻⁸，其余 `r n_qtn_ns` 个是靠多位点模型联合判定（条件证据）才显著的；反过来，654 个显著 SNP 中只有 `r n_sig_qtn` 个被选为 QTN。此外，**QTN 并不全是 Bonferroni 显著**：`r sm$n_sig` 个为 SIG（LOD ≥ 7.7），`r sm$n_sug` 个为 SUG（3 < LOD < 7.7），后者只作参考。
+
 ## 3.3　QTN 的染色体分布
 
 `r sm$n_qtn` 个 QTN 分布于 `r nrow(qchr)` 条染色体（图 4、表 5）；chr`r sub("^chr", "", qchr[which.max(SIG + SUG), chr])` 数量最多（`r max(qchr$SIG + qchr$SUG)` 个）。
