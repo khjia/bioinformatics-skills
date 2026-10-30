@@ -104,33 +104,44 @@ qt[, lab := fifelse(!is.na(gene_id) & gene_id != "intergenic" & gene_id != "", g
                     sprintf("%s %.2fMb", sub("^chr", "", as.character(chr)), pos/1e6))]
 topl <- qt[order(-lod)][, .SD[1], by = lab][order(-lod)][1:4]
 
-p2 <- ggplot(db, aes(cum, neglog)) +
+qt[, sig := factor(significance, levels = c("SIG", "SUG"))]
+p2a <- ggplot(db, aes(cum, neglog)) +
   geom_point(aes(colour = grp), size = 1.35, alpha = 0.7, stroke = 0) +
-  geom_point(data = qt, aes(cum, neglog, shape = significance), colour = "#C00000",
-             size = 2.7, stroke = 0.8, inherit.aes = FALSE) +
   geom_hline(yintercept = -log10(BONF), colour = "#FF0000", linetype = "dotted", linewidth = 0.55) +
-
   geom_text_repel(data = topl, aes(cum, neglog, label = lab), inherit.aes = FALSE,
-                  size = 2.7, colour = "#7F0000", min.segment.length = 0,
+                  size = 2.6, colour = "#7F0000", min.segment.length = 0,
                   max.overlaps = Inf, segment.size = 0.25, direction = "y",
                   nudge_y = 6, seed = 42) +
   scale_colour_manual(values = COL, name = "染色体") +
-  scale_shape_manual(values = c(SIG = 17, SUG = 16), name = "QTN 显著性") +
   scale_x_continuous(breaks = ctr$c, labels = sub("^chr", "", ctr$chr), expand = c(0.006, 0)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.10))) +
-  labs(title = sprintf("%s（%s）全基因组关联 Manhattan 图", CN, TR),
-       subtitle = sprintf("红三角 = Fast3VmrMLM 多位点模型检出 QTN（SIG %d 个，SUG %d 个），纵坐标为相应标记的单点 −log₁₀P；红点线 = Bonferroni 2.0×10⁻⁸",
-                          sum(qt$significance == "SIG", na.rm = TRUE), sum(qt$significance == "SUG", na.rm = TRUE)),
-       x = NULL, y = expression(-log[10](italic(p)))) +
+  labs(x = NULL, y = expression(-log[10](italic(p)))) +
+  theme_bw(base_size = 11) +
+  theme(text = element_text(family = cjk_font), panel.grid = element_blank(),
+        panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.6),
+        axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        legend.position = "top", legend.box = "horizontal",
+        legend.key.width = unit(1.1, "lines"), plot.margin = margin(20, 10, 2, 6))
+
+p2b <- ggplot(qt, aes(cum, lod)) +
+  geom_segment(aes(xend = cum, y = 0, yend = lod, colour = sig), linewidth = 0.6) +
+  geom_point(aes(colour = sig), size = 1.5) +
+  geom_hline(yintercept = 7.7, colour = "grey40", linetype = 2, linewidth = 0.45) +
+  scale_colour_manual(values = c(SIG = "#B2182B", SUG = "#E69F00"), name = "QTN") +
+  scale_x_continuous(breaks = ctr$c, labels = sub("^chr", "", ctr$chr), expand = c(0.006, 0)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(x = NULL, y = "LOD") +
   theme_bw(base_size = 11) +
   theme(text = element_text(family = cjk_font), panel.grid = element_blank(),
         panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.6),
         axis.text.x = element_text(size = 6.5), legend.position = "top",
-        legend.box = "horizontal", legend.key.width = unit(1.1, "lines"),
-        plot.title = element_text(hjust = .5, face = "bold", size = 12),
-        plot.subtitle = element_text(hjust = .5, size = 8.6),
-        plot.margin = margin(6, 10, 4, 6))
-ggsave(file.path(FIG, "f2_manhattan.png"), p2, width = 10, height = 4.6, dpi = 220,
+        legend.key.width = unit(1.1, "lines"), plot.margin = margin(2, 10, 12, 6))
+
+p2 <- cowplot::plot_grid(p2a, p2b, ncol = 1, rel_heights = c(1.8, 1), align = "v", axis = "lr")
+p2 <- cowplot::ggdraw(p2) +
+  cowplot::draw_label(sprintf("%s（%s）Manhattan 图｜上：−log₁₀P；下：QTN 的 LOD", CN, TR),
+                      fontfamily = cjk_font, size = 12, fontface = "bold", y = 0.995)
+ggsave(file.path(FIG, "f2_manhattan.png"), p2, width = 10, height = 8, dpi = 220,
        device = grDevices::png, type = "cairo")
 
 ## ---------------- 3. QQ ----------------

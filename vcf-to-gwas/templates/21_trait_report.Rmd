@@ -211,10 +211,10 @@ embed_img("f1_pheno.png", sprintf("图 1　%s 在 200 份元宝枫种质中的�
 Manhattan 图（图 2）显示全基因组关联格局；共有 `r sm$n_snp_sig` 个 SNP 达到 Bonferroni 显著（*p* < 2.0×10⁻⁸），最小 *p* = `r fmtp(sm$min_p)`。QQ 图（图 3）尾部偏离对角线，提示真实关联信号；λ_GC = `r sprintf("%.3f", sm$lambda)`。
 
 ```{r fig2, results='asis'}
-embed_img("f2_manhattan.png", sprintf("图 2　%s 全基因组关联 Manhattan 图。纵坐标为单标记 −log₁₀P；深蓝/浅蓝点分别代表奇数/偶数染色体；红色三角与圆点分别标注 SIG 与 SUG QTN；红色点线为 Bonferroni 阈值 2.0×10⁻⁸；标注为 LOD 最高的 4 个 QTN 所在基因。", CN), 1050)
+embed_img("f2_manhattan.png", sprintf("图 2　%s 全基因组关联结果。上panel：单标记 −log₁₀P（深蓝/浅蓝为奇数/偶数染色体；红点线为 Bonferroni 阈值 2.0×10⁻⁸；标注为 LOD 最高的 4 个 QTN 所在基因）；下panel：QTN 的 LOD（深红/橙色为 SIG/SUG；灰色虚线为 LOD 7.7）。", CN), 1050)
 ```
 
-**图 2 解读。** 横轴是染色体（按顺序首尾拼接），纵轴是该标记单点检验的 −log₁₀P，越高表示“该标记与性状有关”的证据越强。深蓝/浅蓝只是为了区分相邻染色体，没有生物学含义。红色三角/圆点是 Fast3VmrMLM 多位点模型判定的 SIG/SUG QTN，纵坐标画在该标记自身的单点 −log₁₀P 上，所以有的 QTN 看起来不高——它是靠多位点模型“联合”判定的。红色点线是 Bonferroni 阈值，越过它才算全基因组显著。
+**图 2 解读。** 图分上下两部分，共用同一条染色体横轴。**上panel** 是单标记检验的 −log₁₀P，越高表示该标记与性状有关的证据越强；深蓝/浅蓝只为区分相邻染色体，没有生物学含义；红点线是 Bonferroni 阈值，越过它才算全基因组显著。**下panel** 把 QTN 的 LOD 单独画出来（深红 SIG、橙色 SUG，灰虚线 LOD 7.7），这样 QTN 的强弱不再被单点 p 掩盖——上panel 里看起来不高的 QTN，其 LOD 可能很高，因为它是多位点模型“联合”判定的。两panel 对照，可以同时看到“单点证据在哪里”和“QTN 证据有多强”。
 
 ```{r fig3, results='asis'}
 embed_img("f3_qq.png", sprintf("图 3　%s 关联检验的 QQ 图。灰色虚线为 y = x 参考线；λ_GC 由 p 值中位数换算。", CN), 560)
