@@ -400,7 +400,7 @@ kcs <- merge(near[gene_id %in% cand$gene_id, .(gene_id, chr, start, end, strand)
 kcs <- merge(kcs, qt[, .(n_qtn = .N, max_lod = max(lod)), by = gene_id], by = "gene_id", all.x = TRUE)
 fwrite(kcs, file.path(OUT, "tab_candidate_genes.tsv"), sep = "\t")
 
-summ <- data.table(trait = TR, anchor = AMARK, anchor_chr = ACHR, anchor_pos = APOS,
+summ <- data.table(trait = TR, anchor = AMARK, anchor_chr = ACHR, anchor_pos = APOS, anchor_lod = anchor$lod[1],
                    window_start = WIN1, window_end = WIN2, n_genes = nrow(near),
                    n_snp = nrow(mid), n_qtn = nrow(qt),
                    n_sig = sum(qt$significance == "SIG", na.rm = TRUE),

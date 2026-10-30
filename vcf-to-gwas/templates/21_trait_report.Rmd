@@ -129,22 +129,33 @@ kable(t1, caption = "表 1　数据集与表型概况", format = "html", row.nam
 
 **名词解释（先看这一节）**
 
+- **GWAS（genome-wide association study，全基因组关联分析）**：在全基因组范围内逐个检验遗传标记与性状的统计关联。
+- **SNP（single nucleotide polymorphism，单核苷酸多态性）**：单个碱基位置上的常见变异，是本研究的基本标记单位。
+- **MAF（minor allele frequency，次等位基因频率）**：群体中较不常见等位基因的频率；MAF ≥ 0.05 表示该变异在群体中足够常见。
+- **LD（linkage disequilibrium，连锁不平衡）**：邻近变异一起遗传的现象。LD 强时，一串变异会同时显著，统计上很难区分谁才是真正的因果位点。
 - **QTN（quantitative trait nucleotide，数量性状位点）**：多位点模型判定与性状显著相关的遗传标记。它不一定是真正的因果突变，也可能只是与因果位点处在同一 LD 区块里的“代理”标记。
-- **LOD**：似然比的对数（log₁₀），越大表示“该位点与性状有关”的证据越强。LOD = 7.7 大约相当于单标记检验 *p* = 2×10⁻⁸。
-- **SIG（显著）**：LOD ≥ 7.7，达到全基因组 Bonferroni 阈值。
-- **SUG（提示性）**：3 < LOD < 7.7，证据较弱，只作参考，不作为结论。
-- **LD（连锁不平衡）**：邻近变异一起遗传的现象。LD 强时，一串变异会同时显著，统计上很难区分谁才是真正的因果位点。
+- **LOD（logarithm of odds，优势对数）**：似然比的对数（log₁₀），越大表示“该位点与性状有关”的证据越强。LOD = 7.7 大约相当于单标记检验 *p* = 2×10⁻⁸。
+- **SIG（significant，显著）**：LOD ≥ 7.7，达到全基因组 Bonferroni 阈值。
+- **SUG（suggestive，提示性）**：3 < LOD < 7.7，证据较弱，只作参考，不作为结论。
+- **Bonferroni 校正**：多重检验校正方法，阈值 = 0.05 / 检验次数；本研究为 0.05 / 2,494,579 = 2.0×10⁻⁸。
+- **PC（principal component，主成分）**：用基因型矩阵提取的群体结构轴，作为协变量控制群体分层。
+- **PIP（posterior inclusion probability，后验包含概率）**：某变异属于因果变异的模型后验概率（0–1），只用于排序，不等于“99% 就是它”。
 - **可信集（credible set）**：精细定位给出的“最可能包含因果变异的候选集合”，集合越小、PIP 越高，定位越精确。
-- **PIP（后验包含概率）**：某变异属于因果变异的模型后验概率（0–1），只用于排序，不等于“99% 就是它”。
+- **SuSiE（Sum of Single Effects，单效应求和模型）**：一种贝叶斯精细定位方法，把多个信号拆成若干个单效应之和。
 - **标签 SNP（tag SNP）**：从一段高度连锁的变异中挑出的少数代表位点，用它们的基因型组合代表单倍型，从而降低维度。
+- **TSS（transcription start site，转录起始位点）**：基因开始转录的位置；TSS 上游 2 kb 内常作为启动子区。
+- **UTR（untranslated region，非翻译区）**：mRNA 中不翻译成蛋白的 5′ 或 3′ 区域，参与转录后调控。
+- **CDS（coding sequence，编码序列）**：真正翻译成蛋白的序列；CDS 内的变异可能改变氨基酸。
+- **KCS（3-ketoacyl-CoA synthase，3-酮脂酰-CoA 合酶）**：催化超长链脂肪酸延长第一步的酶，是本研究的候选基因家族。
+- **KW（Kruskal-Wallis 检验）与 ANOVA（analysis of variance，方差分析）**：分别用于比较单倍型组间差异的非参数与参数方法。
 
 ## 2.2　基因型与质控
 
-基因型为全基因组重测序变异集，经双等位 SNP、缺失率与次等位基因频率过滤后保留 **2,494,579 个 SNP**，分布于 13 条染色体（chr01a–chr13a），MAF ≥ 0.05。关联分析直接使用该 SNP 集，未做 LD 抽稀，以保留定位分辨率。
+基因型为全基因组重测序变异集，经双等位单核苷酸多态性（SNP）、缺失率与次等位基因频率（MAF）过滤后保留 **2,494,579 个 SNP**，分布于 13 条染色体（chr01a–chr13a），MAF ≥ 0.05。关联分析直接使用该 SNP 集，未做 LD 抽稀，以保留定位分辨率。
 
 ## 2.3　全基因组关联模型
 
-采用多位点混合线性模型 **Fast3VmrMLM v2.0**，以 3 个主成分（`PopStrType = "PC"`）为固定效应协变量控制群体结构。显著性判定沿用软件内置 Bonferroni 校正：*p* = 0.05 / 2,494,579 = **2.00×10⁻⁸**，对应 **LOD = 7.7**；LOD ≥ 7.7 记为 **SIG**，3 < LOD < 7.7 记为 **SUG**。
+采用多位点混合线性模型 **Fast3VmrMLM v2.0**，以 3 个主成分（principal component, PC；`PopStrType = "PC"`）为固定效应协变量控制群体结构。显著性判定沿用软件内置 Bonferroni 校正：*p* = 0.05 / 2,494,579 = **2.00×10⁻⁸**，对应 **LOD = 7.7**；LOD ≥ 7.7 记为 **SIG**，3 < LOD < 7.7 记为 **SUG**。
 
 ```{r tab2}
 susie_ver <- tryCatch(as.character(packageVersion("susieR")), error = function(e) "—")
@@ -163,7 +174,7 @@ kable(t2, caption = "表 2　主要软件与版本", format = "html", row.names 
 
 ## 2.5　单倍型关联
 
-在主峰窗口内，按“QTN 数 → 最高 LOD → 与锚点距离”排序取候选基因；提取基因体 ±1 kb 内 SNP，先做单标记关联，保留 *p* < 0.05 者为标签候选，按 *p* 升序以 *r*² < 0.8 去冗余，最多 4 个标签 SNP（标签 SNP 是从一段高度连锁的变异中挑出的少数代表位点，用它们的组合概括单倍型）；标签 SNP 的基因型组合构成单倍型，频率 < 5% 合并为“其他”。关联检验采用 Kruskal-Wallis 与单因素方差分析（ANOVA）。最终展示成功构建单倍型的前 3 个基因。
+在主峰窗口内，按“QTN 数 → 最高 LOD → 与锚点距离”排序取候选基因；提取基因体 ±1 kb 内 SNP，先做单标记关联，保留 *p* < 0.05 者为标签候选，按 *p* 升序以 *r*² < 0.8 去冗余，最多 4 个标签 SNP（标签 SNP 是从一段高度连锁的变异中挑出的少数代表位点，用它们的组合概括单倍型）；标签 SNP 的基因型组合构成单倍型，频率 < 5% 合并为“其他”。关联检验采用 Kruskal-Wallis（KW）检验与单因素方差分析（analysis of variance, ANOVA）。最终展示成功构建单倍型的前 3 个基因。
 
 ```{r tab3}
 t3 <- data.table(
@@ -269,7 +280,9 @@ kable(t6, caption = "表 6　LOD 最高的 20 个 QTN", format = "html", row.nam
 
 ## 3.4　主峰区域与候选基因
 
-主峰锚点为 `r sm$anchor`（`r sm$anchor_chr` `r sprintf("%.2f", sm$anchor_pos/1e6)` Mb，LOD = `r sprintf("%.2f", q20$lod[1])`）。所谓“锚点”，是 LOD 最高且能注释到基因的 QTN；以它为中心 ±1 Mb 作为主峰窗口。区域关联图（图 5）给出窗口内各 SNP 的 −log₁₀P 与相对最强单标记的 *r*²，下方为基因模型。
+主峰锚点为 `r sm$anchor`（`r sm$anchor_chr` `r sprintf("%.2f", sm$anchor_pos/1e6)` Mb，LOD = `r sprintf("%.2f", sm$anchor_lod)`）。所谓“锚点”，是 LOD 最高且能注释到基因的 QTN；以它为中心 ±1 Mb 作为主峰窗口。区域关联图（图 5）给出窗口内各 SNP 的 −log₁₀P 与相对最强单标记的 *r*²，下方为基因模型。
+
+**需要区分三个“最强”。** 它们回答的问题不同：① **多位点 LOD 最高**的是 `r sm$anchor`（LOD `r sprintf("%.2f", sm$anchor_lod)`，单点 *p* = 3.4×10⁻⁹），因此被用作主峰锚点；② **单点 *p* 最小**的是 `chr04a:9289621`（*p* = 1.6×10⁻²³），代表边际证据最强的标记；③ 后文 SuSiE 的 **PIP 最高**的是 `chr04a:9525509`（PIP ≈ 1）。三者不一致是正常的：LOD 是联合模型证据，单点 *p* 是边际证据，PIP 是贝叶斯后验；报告并列呈现，不把任何一个当作唯一结论。
 
 窗口内共 `r sm$n_genes` 个基因（表 8）。按 QTN 数与最高 LOD 排序的前 3 个候选基因见表 7，其中 `r cand$gene_id[1]` 含 `r cand$n_qtn[1]` 个 QTN（最高 LOD = `r sprintf("%.2f", cand$max_lod[1])`），注释为 `r cand$Preferred_name[1]`。
 
@@ -362,7 +375,8 @@ if (nrow(hap)) {
 ```{r susie_section, results='asis', echo=FALSE}
 if (has_susie) {
   cat("\n## 3.7　SuSiE 精细定位（补充分析）\n\n")
-  cat("为独立评估主峰内的信号数目与可信变异，使用个体基因型（in-sample LD）对 chr04a 8.30–10.30 Mb 区间运行 SuSiE（susieR 0.14.2）：表型与基因型先对 3 个 PC 残差化并标准化，L = 10，95% 可信集，纯度阈值 |r| > 0.1。\n\n")
+  cat("本节对 3.4 的**同一主峰**做精细定位，但把区间取为 chr04a 8.30–10.30 Mb（较主峰窗口向两侧各扩约 0.5 Mb，以完整覆盖 KCS 簇侧翼）。使用个体基因型（in-sample LD）运行 SuSiE（susieR 0.14.2）：表型与基因型先对 3 个 PC 残差化并标准化，L = 10，95% 可信集，纯度阈值 |r| > 0.1。\n\n")
+  cat("需要强调：**SuSiE 不使用 LOD，而用 PIP（后验包含概率）**。3.4 中的 LOD 是主峰锚点的多位点证据，本节的 PIP 是贝叶斯后验，两者不可直接比较；它们从不同角度支持同一结论。\n\n")
   cat(sprintf("共得到 **%d 个可信集**（表 11）。\n\n", nrow(scs)))
   tS1 <- scs[, .(可信集 = CS, 变异数 = size, 代表变异 = top_snp,
                  位置 = sprintf("%.3f", top_pos / 1e6),
