@@ -194,6 +194,10 @@ kable(t3, caption = "表 3　关键分析参数（含非默认取值）", format
 
 **表 3 解读。** 列出所有偏离默认值的参数及其理由。复现时按这张表设置即可；其中 Bonferroni 阈值由 SNP 总数决定，换数据集时要重新计算。
 
+
+## 2.6　局部 LD 结构可视化
+
+主峰内部的连锁结构用 **LDBlockShow v2.6** 绘制：以区间 VCF（chr04a 9.43–9.61 Mb，MAF ≥ 0.1，574 个 SNP）、GWAS 的 `chr/pos/P` 值文件与 GFF3 注释为输入，LD 统计量取 *r*²，输出局部 Manhattan、基因轨道与三角 LD 热图（SVG）。该图用于判断主峰内哪些区段处于强连锁、候选基因是否落在同一 LD 区块内。
 # 3　结果
 
 ## 3.1　表型变异
@@ -459,6 +463,59 @@ if (has_known) {
 
 **表 14 解读。** 这是用同源基因与性状关键词在 Europe PMC 检索到的文献，按引用数排序，用于回答“这个基因家族以前有没有人研究过、研究到什么程度”。它提供的是模式物种中的旁证，不代表本物种该位点已被验证；没有检索到文献也不能当作“新位点”的证据。
 
+
+## 3.10　局部 LD 结构与候选区间
+
+为看清主峰内部的连锁结构，用 LDBlockShow v2.6 对 chr04a 9.43–9.61 Mb（179.96 kb，574 个 SNP）绘制“局部 Manhattan + 基因轨道 + 三角 LD 热图”（图 10）。输入为该区间的 VCF、GWAS 的 chr/pos/P 值文件与 GFF3 注释；LD 统计量为 *r*²。
+
+```{r fig10, results='asis'}
+embed_img("ldblock.png", "图 10　chr04a 9.43–9.61 Mb 的局部关联与 LD 结构（LDBlockShow）。上：局部 Manhattan，红点超过 Bonferroni 阈值、蓝点未超过；中：染色体坐标、基因轨道（浅蓝为基因，洋红为外显子/转录本）与 SNP→基因连线（绿色）；下：三角 LD 热图，颜色为 SNP 对之间的 r²（白 0 → 红 1）。", 1000)
+```
+
+**怎么读这张图。** 上方是区间内每个 SNP 的 −log₁₀P：红点超过 Bonferroni 阈值，蓝点未超过；横轴标出 Start 9.430、Region 179.96 kb、End 9.610 Mb。中间是基因轨道：浅蓝横条为基因范围，洋红色竖条为外显子/转录本，绿色细线把每个 SNP 连到它所在的基因；本区间包含三个 KCS2 基因（0087600、0088000、0088400）。下方是三角 LD 热图：每个小格是一对 SNP 的 *r*²，颜色由白（0）到红（1），越红连锁越强。
+
+**它说明了什么。** 第一，主峰不是单个孤立位点，而是一段连续的强 LD 区块：9.44–9.55 Mb 与 9.55–9.61 Mb 各有一片深红三角，说明这些 SNP 高度共分离，统计上难以区分谁是真凶——这正是多位点模型检出一串 QTN、而 SuSiE 只能给出少数代表变异的原因。第二，三个 KCS2 基因都落在高 LD 区块内，因此“哪个 KCS2 是因果基因”不能只靠关联信号判断，需要表达或功能证据。第三，区间两端（9.43 附近与 9.60 以后）LD 明显减弱，说明 9.43–9.61 Mb 已能覆盖主峰的主要 LD 结构，窗口选择合理。
+
+**局限。** 图中 LD 为 574 个 SNP 的成对 *r*²，未做单倍型块（block）划分；基因模型只画最长转录本；红/蓝点由阈值自动着色，未画阈值虚线；若要发表，建议在 AI/Inkscape 中调整字体与配色。
+
+## 3.11　KCS2 基因簇的鉴定依据与簇内基因功能
+
+这一节回答两个问题：报告里的“KCS2”是怎么定出来的，以及同一簇里的其他基因是什么。
+
+主峰 ±1 Mb 窗口（chr04a 7.80–9.78 Mb）内共 168 个基因。这些基因不是人工逐个判读的，而是先由 eggNOG-mapper（evolutionary genealogy of genes: Non-supervised Orthologous Groups）对全基因组 60,006 个基因做直系同源分配，再整合 GO（Gene Ontology，基因本体）条目、EC（Enzyme Commission，酶委员会）编号、KEGG（Kyoto Encyclopedia of Genes and Genomes，京都基因与基因组百科全书）通路、Pfam（protein family，蛋白家族）结构域、Swiss-Prot 人工审编条目、拟南芥同源基因与 NR（non-redundant protein，非冗余蛋白）库比对结果，汇成一张注释总表。报告直接读取这张表，不重复运行注释流程。
+
+判定一个基因是 KCS2，要求三条证据同时成立：
+
+1. **命名**：eggNOG 的 Preferred_name 字段为 KCS2；
+2. **酶号**：EC 2.3.1.199，即 ultra-long-chain fatty acid 3-ketoacyl-CoA synthase（超长链脂肪酸 3-酮脂酰辅酶 A 合酶），催化酰基辅酶 A 与丙二酰辅酶 A 缩合生成 3-酮脂酰辅酶 A，是脂肪酸延伸循环的第一步；
+3. **结构域**：Pfam 同时命中 PF08541（3-Oxoacyl-[acyl-carrier-protein (ACP)] synthase III C terminal，3-氧脂酰-酰基载体蛋白合酶 III C 端）与 PF08392（FAE1/Type III polyketide synthase-like protein，FAE1/III 型聚酮合酶样蛋白），这是 KCS/FAE1 家族的标志性双结构域。
+
+三条同时满足的基因在窗口内共 9 个：0087400、0087500、0087600、0087700、0088000、0088200、0088300、0088400、0088500。它们集中在 chr04a 9.374–9.625 Mb，跨度约 251 kb，构成一个串联重复簇（表 15）。
+
+```{r tab15kcs, results='asis'}
+kcs <- ngene[start >= 9.35e6 & end <= 9.65e6][order(start)]
+tk <- kcs[, .(基因 = gene_id,
+              位置 = sprintf("%.3f–%.3f", start/1e6, end/1e6),
+              功能注释 = fifelse(is.na(fun) | fun == "—", "未注释", fun),
+              EC = fifelse(is.na(EC) | EC == "-", "—", EC),
+              拟南芥同源 = fifelse(is.na(at_id) | at_id == "-", "—", at_id),
+              拟南芥功能 = fifelse(is.na(at_desc) | at_desc == "", "—", at_desc),
+              `QTN数` = n_qtn,
+              `最高LOD` = fifelse(is.na(max_lod), "—", sprintf("%.2f", max_lod)))]
+kable(tk, caption = "表 15　chr04a 9.35–9.65 Mb 内 KCS2 基因簇的组成与功能注释", format = "html", row.names = FALSE)
+```
+
+**表 15 解读。** 表中 12 个基因按物理位置排列，前 9 个是 KCS2，后 3 个是夹在簇内的非 KCS 基因。位置一列是基因起止（Mb），可以直观看出这个簇有多紧凑：9 个 KCS2 挤在 251 kb 内，平均间隔不到 30 kb，属于典型的串联重复阵列。QTN 数与最高 LOD 两列是关联证据：0087600 与 0088400 各带 4 个 QTN（最高 LOD 分别为 106.33 与 53.67），0088000 带 2 个 QTN（最高 LOD 96.66），其余成员各带 1 个；0088200 与 0088500 在该窗口内没有 QTN。这说明关联信号覆盖了整个簇，而不是集中在某一个成员上——与图 10 中整段强 LD 的观察一致。
+
+簇内 3 个非 KCS 基因值得单独说明。0087800 与 0087900 没有任何注释：没有 eggNOG 命中、没有 GO 条目、没有 EC 号、没有 Pfam 结构域、没有同源比对结果，属于“注释空白”基因。0088100 注释为 Ribonuclease H protein（核糖核酸酶 H），Pfam 为 PF13456（Reverse transcriptase-like，反转录酶样），NR 比对为未表征蛋白，提示它来自反转录转座子，与脂肪酸合成无关。这三个基因的存在说明簇不是纯粹的 KCS 阵列，中间插入的序列可能是转座子或注释不完整的片段。
+
+**为什么这个结论与性状自洽。** 除了三条注释证据，还有一层通路一致性：9 个 KCS2 在 KEGG 中都归入 ko00062（Fatty acid elongation，脂肪酸延伸）与 ko01110（Biosynthesis of secondary metabolites，次生代谢物生物合成），KEGG 模块为 M00415（fatty acid elongation），GO 中含 GO:0009922（fatty acid elongase activity，脂肪酸延伸酶活性）。神经酸（C24:1）是含 24 个碳、1 个双键的超长链单不饱和脂肪酸，在植物中由油酰辅酶 A（C18:1）经 C20:1、C22:1 逐轮延伸生成，每一轮延伸的缩合步骤都由 KCS 催化，而 KCS 是公认的限速步骤。因此“主峰落在 KCS 基因簇上”与“性状是 C24:1 含量”在生物学上相互印证，这也是把 KCS2 列为首选候选的主要理由。
+
+**命名上的一个坑。** 9 个 KCS2 的拟南芥最佳命中都是 AT5G43760，Swiss-Prot 条目为 Q9FG87（KCS20_ARATH，基因名 KCS20），而拟南芥注释字段里写的描述是“3-ketoacyl-CoA synthase 19”。两个名字指同一个基因，属于不同数据库、不同版本的命名差异。因此判断家族归属应以 EC 号与 Pfam 结构域为准，不要纠结 KCS 后面的编号。0087400 是例外：它的拟南芥最佳命中是 AT2G26640（Swiss-Prot O48780，KCS11_ARATH），属于 KCS 家族的另一成员，说明这个簇并非单一基因的串联复制，而是家族成员混杂的簇。
+
+**证据等级。** 必须强调，以上全部是注释推断，不是功能验证。注释只能说明“这个基因编码一个 KCS 酶”，不能说明“这个基因控制 C24:1 含量”，更不能说明簇内 9 个成员里哪一个是因果基因。簇内成员高度连锁（图 10），统计上无法区分；植物 KCS 家族常以串联重复形式扩张，成员之间存在底物链长偏好与表达部位的分化，即亚功能化。要把候选缩小到 1–2 个，需要：① 种子不同发育期 KCS2 表达量与 C24:1 积累的时序对应；② 基于主峰窗口内 QTN 的单倍型-表达关联（expression QTL）；③ 在酵母或拟南芥 kcs 突变体中异源表达，检验能否把 C18:1 延伸到 C24:1；④ 元宝枫自身的基因编辑或 RNA 干扰（RNA interference，RNAi）验证。
+
+**局限。** 注释结果依赖数据库版本与比对阈值，NR 库中大量“putative”“hypothetical protein”条目的可靠性有限；0087800 与 0087900 的“无注释”也不等于“无功能”，还可能是基因模型错误、序列片段化或数据库未收录。
 # 4　讨论
 
 ## 4.1　主峰候选基因
@@ -518,10 +575,15 @@ if (has_known) {
     文件 = sprintf("results/known_loci/%s_known.tsv", TR),
     内容 = "Europe PMC 文献核对"))
 }
-kable(t10, caption = "表 15　交付文件清单", format = "html", row.names = FALSE)
+if (file.exists(file.path(FIGD, "ldblock.png"))) {
+  t10 <- rbind(t10, data.table(
+    文件 = sprintf("figures/%s_%s_report/ldblock.png", PREFIX, TR),
+    内容 = "局部 LD 结构图（LDBlockShow）"))
+}
+kable(t10, caption = "表 16　交付文件清单", format = "html", row.names = FALSE)
 ```
 
-**表 15 解读。** 本报告生成的全部文件清单，便于打包、归档与复现。
+**表 16 解读。** 本报告生成的全部文件清单，便于打包、归档与复现。
 
 ## 5.2　全部 QTN
 
@@ -530,10 +592,10 @@ t11 <- qall[, .(基因 = gene_id, 染色体 = chr, 位置 = sprintf("%.3f", pos/
                 标记 = marker, LOD = sprintf("%.2f", lod), 显著性 = significance,
                 功能注释 = fifelse(is.na(Preferred_name) | Preferred_name == "-", "—", Preferred_name))]
 setnames(t11, c("基因", "染色体", "位置 (Mb)", "标记", "LOD", "显著性", "功能注释"))
-kable(t11, caption = sprintf("表 16　全部 %d 个 QTN 及其注释", nrow(qall)), format = "html", row.names = FALSE)
+kable(t11, caption = sprintf("表 17　全部 %d 个 QTN 及其注释", nrow(qall)), format = "html", row.names = FALSE)
 ```
 
-**表 16 解读。** 全部 QTN 的完整列表（含注释），供查阅与二次筛选；正文表 6 只列了 LOD 最高的 20 个。
+**表 17 解读。** 全部 QTN 的完整列表（含注释），供查阅与二次筛选；正文表 6 只列了 LOD 最高的 20 个。
 
 <div class="small">
 说明：本报告中的“QTN”指 Fast3VmrMLM 多位点模型输出的显著/提示性位点；SIG 与 SUG 的划分依据软件内置 Bonferroni 阈值（LOD = 7.7）。所有图件与表格均由同一套结果文件生成，参数与版本见表 2、表 3。
