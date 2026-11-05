@@ -95,3 +95,49 @@ vcf-to-gwas/
 - 区域缺失率 10–17% 时，提取基因型要放宽 `--geno`（0.1 → 0.25 → 0.5）
 - 表格单元格若只有 `+`/`-` 会被 pandoc 当成列表，破坏整张表
 
+### `togcn` — 时序共表达网络（TO-GCN）与分层调控
+
+单一时序或多条件时序 RNA-seq 的层级调控网络构建：
+
+```
+togcn/
+├── SKILL.md              # 主文档（何时用、8 步流程、出图与 Methods 要点）
+├── references/
+│   ├── algorithm.md      # 官方三程序算法（C1/C2 语义、八类共表达、BFS 源码级整理）
+│   └── pitfalls.md       # 19 条实测坑点 + 数字自检表
+└── templates/
+    ├── Cutoff_single.cpp / TO-GCN_single.cpp   # 官方源码
+    ├── togcn_fast.cpp                          # 等价优化实现（邻接表）
+    ├── build_matrices.R                        # TPM 建矩阵 + 组水平过滤
+    ├── build_tree.py                           # 重建 BFS 树（带父节点）
+    ├── merge_layers.py                         # 层合并（min_n / max_n）
+    ├── layer_heatmaps.R                        # 层热图（基因级 z-score）
+    ├── network_circles.R                       # 逐层调控圈
+    └── seed_expression.R                       # 种子基因表达
+```
+
+核心要点（详见 SKILL.md）：
+
+- 阈值必须由官方 `Cutoff` 给出，并扫描确认网络没被压成“小世界”（最大层占比 > 50% 就要警惕）
+- 自写实现必须与官方二进制在同一矩阵上 `diff` 层级文件一致才能用
+- 层级是**图距离**，报告时必须同时给出边数与覆盖节点数
+- 跨层边必须保留：把基因按“最强 TF 所在层”放置会让层间调控消失
+
+### `analysis-report` — 分析报告写作（材料方法 → 结果 → 解读）
+
+把一次完整分析（原始数据到最终图表）写成自包含 HTML 报告：
+
+```
+analysis-report/
+├── SKILL.md                    # 骨架 + 三条硬规则 + 技术实现
+├── references/style-guide.md   # 逐段模板、措辞规则、自检清单、常见错误
+└── templates/
+    ├── report_template.Rmd     # 可直接改用的骨架
+    └── render.R                # 渲染脚本（含 pandoc PATH 处理）
+```
+
+核心要点（详见 SKILL.md）：
+
+- 每一步固定三段：**材料方法**（软件/版本/参数/阈值来源）→ **结果**（只放事实）→ **解读**（2–4 句）
+- 解读回答三件事：数字说明什么、能推出什么、有什么保留；不许拿后文结论倒推
+- 交付前跑自检清单：正文数字与表一致、每图有编号与引用、无服务器路径与账号

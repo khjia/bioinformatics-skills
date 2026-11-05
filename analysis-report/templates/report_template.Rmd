@@ -1,0 +1,89 @@
+---
+title: "项目名 分析报告"
+subtitle: "从原始数据到最终结果的一句话概括"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+    toc_depth: 3
+    theme: cosmo
+    highlight: tango
+    self_contained: true
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.align = "center", out.width = "100%")
+suppressPackageStartupMessages({ library(knitr); library(dplyr) })
+```
+
+# 摘要
+
+| 步骤 | 做了什么 | 关键结果 |
+|---|---|---|
+| 1 | 软件 + 动作 | 关键数字 |
+| 2 | 软件 + 动作 | 关键数字 |
+
+# 步骤 1：xxx（软件 vX.Y）
+
+## 材料方法
+
+- 软件：**软件名 vX.Y**
+- 参数：`--flag value`（只写影响结果的）
+- 输入：xxx
+- 阈值：xxx（写清来源：软件推荐 / 文献 / 自选 + 理由）
+- 输出：xxx
+
+## 结果
+
+```{r step1-table}
+kable(
+  data.frame(项目 = c("A", "B"), 数值 = c(1, 2)),
+  caption = "表 1. 说明这张表是什么（单位）"
+)
+```
+
+![](figs/step1_figure.png)
+
+*图 1. 横轴…纵轴…颜色代表…n = …。*
+
+**解读**：数字说明什么；能推出什么结论；有什么保留。
+
+# 步骤 2：xxx
+
+## 材料方法
+
+- 软件：**软件名 vX.Y**
+- 参数：…
+
+## 结果
+
+**解读**：…
+
+# 讨论与局限
+
+1. 方法学选择带来的偏差
+2. 结论的适用边界
+3. 已知的注释/数据库假象
+4. 未做但应该做的验证
+
+# 软件与版本
+
+```{r versions}
+si <- sessionInfo()
+pk <- c("ggplot2", "dplyr")
+ver <- sapply(pk, function(x) tryCatch(as.character(packageVersion(x)), error = function(e) "未安装"))
+kable(data.frame(软件 = c("R", names(ver)),
+                 版本 = c(paste(si$R.version$major, si$R.version$minor, sep = "."), unname(ver))),
+      caption = "软件与依赖版本")
+```
+
+# 文件清单
+
+| 文件 | 内容 |
+|---|---|
+| `data/xxx.csv` | xxx |
+| `figs/xxx.png` | 图 1 |

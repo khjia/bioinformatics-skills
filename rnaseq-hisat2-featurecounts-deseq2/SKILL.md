@@ -17,6 +17,7 @@ End-to-end bulk RNA-seq analysis pipeline for plant genomes using HISAT2 alignme
 4.Quantification/  → TPM + tissue-level filtering
 5.DEG/        → DESeq2 differential expression
 6.Enrichment/ → clusterProfiler GO/KEGG enrichment
+7.TO-GCN/      → time-ordered co-expression network (see the `togcn` skill)
 ```
 
 ## Stage 1: Read QC (fastp)
@@ -500,6 +501,11 @@ TPM_i = (count_i / length_i_kb) * 1e6 / sum(count_j / length_j_kb for all j)
 ```
 
 ### Filter rule: keep if ANY tissue has mean TPM >= 1
+
+> **时间序列/单因素设计**：这里的“组织”就是**时间点（或处理组）**——先在各组内对重复求平均，
+> 再取各组最大值；判据使用 **> 1**（严格大于）。例如 5 个时间点 × 3 重复，
+> 某基因只在 30 min 高表达、其余接近 0，仍应保留——这类基因往往正是时序网络的种子。
+> 绝不能用全样本平均或计数阈值（`rowMeans(counts) >= 5`）过滤。
 
 ```python
 # Define tissue from sample name
@@ -1072,3 +1078,45 @@ This is the **primary end-to-end bulk RNA-seq pipeline** (HISAT2 + featureCounts
 - **CSI 索引**：染色体 >512Mb 时 BAI 索引会失败，用 `samtools index -c`
 - **组织级过滤**：按组织内平均 TPM 过滤，不是全局平均
 - **ashr 不可用时**：`lfcShrink` 可能失败，回退到未收缩的 LFC（p值不变）
+
+## Stage 7: TO-GCN 时序分层网络（仅时序数据）
+
+当设计是**同一处理的时间序列**（≥4 个时间点 × ≥2 重复）时，在 Stage 5/6 之后接 TO-GCN，
+把差异基因组织成「时间有序的层级 + 调控网络」。完整算法与踩坑见 `togcn` skill。
+
+### 输入
+
+| 输入 | 来源 | 说明 |
+|---|---|---|
+| TPM 矩阵 | Stage 4 | `基因ID + 样本列`，**无表头**（官方 fscanf 要求） |
+| 基因长度 | GTF 外显子并集 | 算 TPM 用：TPM = (count/length) / Σ(count/length) × 10^6 |
+| TF 列表 | iTAK | `tf_classification.txt`，去掉 `.1` isoform 后缀 |
+| 差异基因 | Stage 5 | 各时间点 vs 0 min，padj < 0.05 且 \|log2FC\| > 1 |
+
+网络基因集 = 差异基因 ∪ 全部 TF（TF 必须全进，否则 BFS 断链）。
+
+### 步骤
+
+1. `Cutoff_single <n> matrix.tsv` → 官方推荐阈值（经验分布上尾 5%）
+2. `TO-GCN_single <n> matrix.tsv seeds.txt <cutoff>` → BFS 分层
+   - 官方 BFS 是 O(节点×边)，>5000 节点换 `togcn` skill 里的等价实现，
+     并先用官方二进制在同一矩阵上校验层级文件逐行一致
+3. 层合并：`min_n=100`、`max_n=2000`；小层并入趋势更相似的邻层，按顺序命名 L1…Ln
+4. 时期划分：按层号分段（如 L1–3 / L4–8 / L9–10）
+5. 出图：层热图（基因级 z-score）、逐层调控圈、种子基因表达
+6. 富集：按时期分组做 GO / KEGG，**GO 和 KEGG 分开画多组气泡图**
+
+### 时序项目必须额外报告的 QC
+
+- 原始 reads / clean reads / Q30 / GC（fastp JSON）
+- 比对率（HISAT2 log 的 overall alignment rate）
+- featureCounts 分配率（`.summary` 的 Assigned / 总 reads）
+- 表达过滤前后基因数（如 44,564 → 20,407）
+
+这些数字要和 TO-GCN 网络规模（节点数、边数、覆盖率）放在同一份报告里，
+否则读者无法判断网络是在什么数据质量上构建的。
+
+### 与 Stage 6 的关系
+
+Stage 6 的 GO/KEGG 是「全部差异基因」的富集；Stage 7 的富集是「每个时期」的富集。
+两者互补：前者回答"处理引起什么"，后者回答"什么阶段做什么"。

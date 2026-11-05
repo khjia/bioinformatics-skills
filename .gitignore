@@ -19,3 +19,13 @@ __pycache__/
 # Runtime / cache
 *.log
 *.tmp
+# 只跟踪仓库内的 skill 目录（本地 skills 目录还放着其他私人 skill）
+/*
+!/.gitignore
+!/README.md
+!/fastp.html
+!/resequencing-popgen-pipeline/
+!/rnaseq-hisat2-featurecounts-deseq2/
+!/vcf-to-gwas/
+!/togcn/
+!/analysis-report/
