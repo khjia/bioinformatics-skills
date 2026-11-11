@@ -1,0 +1,378 @@
+---
+title: "元宝枫 22 个性状 GWAS 联合分析报告"
+subtitle: "脂肪酸 · 品质 · 维生素 E｜200 份元宝枫种质"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: false
+    self_contained: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center")
+suppressMessages({library(data.table); library(knitr)})
+WDIR <- Sys.getenv("GWAS_WDIR", getwd())
+source(file.path(WDIR, "scripts/00_config.R"))
+JD  <- file.path(res_dir, "joint")
+JF  <- file.path(fig_dir, "joint")
+rd  <- function(f) fread(file.path(JD, f))
+embed <- function(f, cap, width = 1000) {
+  p <- file.path(JF, f)
+  if (!file.exists(p)) { cat(sprintf("<p style='color:#c00'>缺失图片：%s</p>\n", f)); return(invisible()) }
+  cat(sprintf("<div class='figbox'><img src='%s' style='max-width:%dpx;width:100%%'/><div class='figcap'>%s</div></div>\n",
+              knitr::image_uri(p), width, cap))
+}
+fk <- function(p) ifelse(is.na(p), "—", ifelse(p < 1e-4, formatC(p, format = "e", digits = 1), sprintf("%.3f", p)))
+
+cor_t   <- rd("tab_cor.tsv")
+qs      <- rd("tab_qtl_summary.tsv")
+sg      <- rd("tab_shared_genes.tsv")
+sm      <- rd("tab_shared_markers.tsv")
+hs      <- rd("tab_hotspots.tsv")
+pair    <- rd("tab_trait_pair_shared.tsv")
+kegg    <- rd("tab_kegg_shared.tsv")
+qtl     <- rd("tab_qtl_all.tsv")
+
+## trait labels & groups
+cn_all <- c(trait_cn, vee_cn)
+fa_order <- c("fa_C16_0","fa_C16_1","fa_C18_0","fa_C18_1","fa_C18_2","fa_C18_3n6","fa_C18_3n3",
+              "fa_C20_0","fa_C20_1","fa_C20_2","fa_C22_0","fa_C22_1","fa_C24_0","fa_C24_1")
+qual <- c("oil_g100g","protein_g100g","seed_weight_g")
+vee_tr <- c("vee_alpha","vee_beta","vee_gamma","vee_delta","vee_total")
+lab <- function(x) unname(cn_all[x])
+
+## one direction only for pairwise correlation
+cu <- cor_t[trait1 < trait2]
+cu <- cu[order(-abs(r))]
+
+n_shared_gene <- sg[n_traits >= 2, .N]
+n_shared_loci <- sm[n_traits >= 2, .N]
+n_hot <- nrow(hs)
+```
+
+<style>
+body { font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 15px; line-height: 1.75; }
+h1 { font-size: 26px; margin-top: 30px; }
+h2 { font-size: 21px; border-left: 5px solid #2F5597; padding-left: 10px; margin-top: 30px; }
+h3 { font-size: 16.5px; color: #1F3864; margin-top: 18px; }
+.figbox { margin: 18px 0 22px 0; page-break-inside: avoid; }
+.figbox img { display: block; margin: 0 auto; border: 1px solid #E3E3E3; }
+.figcap { text-align: center; font-size: 13.5px; color: #333; margin-top: 8px; }
+table { font-size: 13px; margin: 12px auto 20px auto; border-collapse: collapse; }
+th, td { padding: 3px 9px; vertical-align: top; }
+caption { caption-side: top; font-size: 14px; font-weight: 600; color: #1F3864; padding-bottom: 6px; }
+</style>
+
+# 摘要
+
+本报告把 200 份元宝枫的 **22 个性状**放在一起分析，回答单个性状报告回答不了的问题：哪些性状在表型上同涨同落，哪些位点同时控制多个性状，以及这些共享位点集中在基因组的哪些区段。22 个性状分三组：**脂肪酸 14 个**（C16–C24 的饱和与不饱和组分）、**品质 3 个**（含油量、蛋白质、千粒重）、**维生素 E 5 个**（α、β、γ、δ、总量）。
+
+```{r tab1}
+t1 <- data.table(
+  性状组 = c("脂肪酸", "品质", "维生素 E", "合计"),
+  性状数 = c(length(fa_order), length(qual), length(vee_tr), length(fa_order) + length(qual) + length(vee_tr)),
+  包含性状 = c(paste(lab(fa_order), collapse = "<br>"),
+               paste(lab(qual), collapse = "<br>"),
+               paste(lab(vee_tr), collapse = "<br>"),
+               "—"))
+kable(t1, caption = "表 1　联合分析的性状分组", format = "html", row.names = FALSE, escape = FALSE)
+```
+
+**主要结果一览**
+
+- 共整合 **`r nrow(qtl)` 条 QTL 记录**（22 个性状，SIG + SUG），检出 QTN 最多的性状有 `r qs$n_qtn[1]` 个，最少的 `r qs$n_qtn[nrow(qs)]` 个。
+- **`r n_shared_gene` 个基因**在 ≥ 2 个性状中被检出，**`r n_shared_loci` 个位点**（染色体 + 位置）被 ≥ 2 个性状共享。
+- **`r n_hot` 个 1 Mb 区间**涉及 ≥ 2 个性状；最强的三个热点分别涉及 **11 个性状**（chr03a 0–1 Mb、chr04a 9–10 Mb、chr02a 1–2 Mb）。
+- 表型相关最强的正向关系是 **VE 总量–γ-生育酚（r = 0.90）** 与 **C24:1–C22:1（r = 0.89）**；最强的负向关系是 **含油量–蛋白质（r = −0.88）** 与 **C18:1–C20:2（r = −0.87）**。
+- KCS 基因 `Actnc04aG0088000` 与 `Actnc04aG0088400` 同时与 C20:1、C22:1、C24:0、C24:1 四个性状关联，是连接“延伸链”表型的关键节点。
+
+# 步骤 1　表型相关结构
+
+## 材料方法
+
+取同一批 200 份种质的 22 个性状实测值（脂肪酸与品质来自同一表型表，维生素 E 来自单独测定表，按样本编号对齐，行序与基因型一致）。计算两两 Pearson 相关系数 *r* 与显著性 *p*，共 231 对。作图用 R `r getRversion()` 的 ggplot2；矩阵按“脂肪酸链长顺序 → 品质 → 维生素 E”排列，而不是聚类排序，目的是让链长梯度直接可见。
+
+## 结果
+
+```{r fig1, results='asis'}
+embed("j1_cor_heatmap.png", "图 1　22 个性状的表型相关矩阵。横纵轴为性状（按脂肪酸链长、品质、维生素 E 分组排列）；方块颜色为 Pearson r，蓝负红正，白色为 0；* 表示 p < 0.05。", 1000)
+```
+
+```{r tab2}
+tt <- cu[r > 0][1:12, .(性状1 = lab(trait1), 性状2 = lab(trait2),
+                 r = sprintf("%.3f", r), p = fk(p))]
+kable(tt, caption = "表 2　正相关最强的 12 对性状", format = "html", row.names = FALSE)
+```
+
+```{r tab3}
+tt2 <- cu[order(r)][1:10, .(性状1 = lab(trait1), 性状2 = lab(trait2),
+                            r = sprintf("%.3f", r), p = fk(p))]
+kable(tt2, caption = "表 3　负相关最强的 10 对性状", format = "html", row.names = FALSE)
+```
+
+## 解读
+
+**同系物同涨同落。** 相关最强的几对都发生在代谢上直接相邻的性状之间：VE 总量与 γ-生育酚（r = 0.90）——γ 是 VE 池的主要组分，总量几乎由它决定；C24:1 与 C22:1（r = 0.89）、C20:0 与 C18:0（r = 0.88）、C24:0 与 C22:0（r = 0.84）——都是同一延伸通路上相邻的底物与产物。这类强正相关说明“链长延伸”是这些性状的共同驱动。
+
+**负相关更能说明调控。** 含油量与蛋白质 r = −0.88，是典型的“油脂-蛋白”此消彼长，属于种子储藏物质分配的结果，而不是某个位点的效应。C18:1 与 C20:2（r = −0.87）、C20:1 与 C24:1（r = −0.78）、C18:1 与 C18:2（r = −0.71）则反映了去饱和与延伸对同一底物池的竞争：C18:1 被拿去延伸就少了去饱和的份，反之亦然。
+
+**注意。** 相关是表型层面的，不能直接推因果；强相关也可能来自共同的群体结构或测定批次。下面两步分别从“共享位点”和“热点区间”两个角度给出遗传学证据。
+
+# 步骤 2　各性状的 QTL 概览
+
+## 材料方法
+
+把 22 个性状的 Fast3VmrMLM 多位点结果合并（脂肪酸与品质来自 06 模块，维生素 E 来自 08 模块），统一字段后按性状汇总 QTN 数、SIG（LOD ≥ 7.7）与 SUG（3 < LOD < 7.7）数、最高 LOD 与最强信号所在染色体。阈值与单性状报告一致：Bonferroni *p* = 0.05 / 2,494,579。
+
+## 结果
+
+```{r fig2, results='asis'}
+embed("j2_qtl_bar.png", "图 2　各性状检出的 QTN 数。柱子颜色为性状组（深蓝脂肪酸、橙品质、绿维生素 E）；柱端数字为 QTN 数。", 900)
+```
+
+```{r tab4}
+t4 <- qs[, .(性状 = lab(trait), 组 = group, QTN = n_qtn, SIG = n_sig, SUG = n_sug,
+             最高LOD = sprintf("%.1f", max_lod), 最强信号染色体 = top_chr)]
+kable(t4, caption = "表 4　22 个性状的 QTL 汇总", format = "html", row.names = FALSE)
+```
+
+## 解读
+
+QTN 数在性状间差 6 倍：脂肪酸组分普遍 86–98 个，维生素 E 的 α、γ 和蛋白质只有 16–26 个。这个差异主要反映**遗传结构**而不是分析质量——脂肪酸组分由少数大效应延伸酶（KCS、FAD）主导，信号集中、容易被多位点模型抓到；蛋白质、α-生育酚这类性状受多微效基因控制，单个位点过不了阈值，检出的就少。
+
+**最高 LOD 与 QTN 数不成正比**：C20:1 只有 96 个 QTN 但最高 LOD 达 220，说明它有一个极强的主效位点；蛋白质 22 个 QTN、最高 LOD 125，说明信号分散。这一点决定了后面“共享位点”的分析里，脂肪酸性状之间更容易出现共享基因，而品质性状之间共享较少——部分原因是统计功效差异，不能全归因于生物学。
+
+# 步骤 3　共享 QTL 基因与多效位点
+
+## 材料方法
+
+把每个 QTL 注释到最近基因（±50 kb 内，超过则记为 intergenic），统计同一基因被多少个**不同性状**检出；同时按“染色体 + 物理位置”统计同一坐标被多少个性状共享。只统计非 intergenic 的注释。共享基因的功能注释取自 eggNOG 总表（Preferred_name、EC、KEGG、Pfam、拟南芥同源）。这里统计的是“同一基因在多个性状的 QTL 列表里出现”，属于**多效性的候选证据**，不是共定位检验。
+
+## 结果
+
+```{r fig3, results='asis'}
+embed("j3_pair_shared.png", "图 3　两两性状共享的 QTL 基因数。颜色越深表示两个性状检出的 QTL 落在同一基因上的次数越多；对角线为空。", 1000)
+```
+
+```{r fig4top, results='asis'}
+embed("j5_top_genes.png", "图 4　多效性最强的 20 个基因。横轴为涉及性状数，柱端标注涉及性状数与最高 LOD；颜色越深表示共用性状越多。", 950)
+```
+
+```{r tab5}
+t5 <- sg[n_traits >= 2][1:20, .(基因 = gene_id, 涉及性状数 = n_traits,
+                               性状 = traits, 关联QTN数 = n_qtn,
+                               最高LOD = sprintf("%.1f", max_lod),
+                               功能注释 = fifelse(is.na(Preferred_name) | Preferred_name %in% c("-", "—"),
+                                                  "未注释", Preferred_name))]
+kable(t5, caption = "表 5　被 ≥ 2 个性状共享的前 20 个基因", format = "html", row.names = FALSE)
+```
+
+```{r tab6}
+t6 <- sm[n_traits >= 3][1:15, .(染色体 = chr, 位置 = sprintf("%.3f", pos/1e6),
+                                涉及性状数 = n_traits, 性状 = traits,
+                                最高LOD = sprintf("%.1f", max_lod))]
+kable(t6, caption = "表 6　被 ≥ 3 个性状共享的位点", format = "html", row.names = FALSE)
+```
+
+## 解读
+
+**共享基因的两种来源要分开看。** 一种是真的多效基因——一个基因的等位差异同时影响多个性状，例如 `Actnc04aG0088400` / `Actnc04aG0088000`（KCS2，EC 2.3.1.199）同时出现在 C20:1、C22:1、C24:0、C24:1 四个延伸链性状里，这符合“一个延伸酶决定相邻链长产物”的生化逻辑。另一种是**统计假象**——两个性状高度相关（如 VE 总量与 γ-生育酚），它们的 QTL 列表本来就高度重叠，共享基因数自然多，但这不代表发现了新的多效位点。
+
+**判断标准**：如果两个性状表型相关很弱（|r| < 0.3）却共享很多基因，多效性证据更强；如果 |r| > 0.8 且共享基因多，多半只是同一个信号的两种读数。表 5 中排在前面、相关性又不高的组合值得优先关注。
+
+# 步骤 4　多性状热点区间
+
+## 材料方法
+
+把全部 QTL 按 1 Mb 分箱（`floor(pos / 1e6)`），统计每个箱内出现的**不同性状数**，保留 ≥ 2 个性状的箱作为热点。这个定义比“共享基因”宽松：只要两个性状的 QTL 落在同一 Mb 内就算热点，不要求注释到同一个基因，因此能捕捉“同一区段、不同基因”的情况。热点只说明物理聚集，不说明因果。
+
+## 结果
+
+```{r fig4, results='asis'}
+embed("j4_hotspots.png", "图 5　多性状热点区间。横轴为物理位置（Mb），纵轴为染色体；点的大小与颜色表示该 1 Mb 区间涉及的性状数（越大越深表示共用性状越多）。", 1000)
+```
+
+```{r tab7}
+t7 <- hs[1:20, .(染色体 = chr, 区间 = sprintf("%.0f–%.0f", bin/1e6, bin/1e6 + 1),
+                 涉及性状数 = n_traits, 区间内QTN数 = n_qtn,
+                 涉及性状 = traits, 最高LOD = sprintf("%.1f", max_lod))]
+kable(t7, caption = "表 7　涉及性状最多的 20 个热点区间", format = "html", row.names = FALSE)
+```
+
+## 解读
+
+热点高度集中：**chr03a 0–1 Mb、chr04a 9–10 Mb、chr02a 1–2 Mb** 三个区间各涉及 11 个性状，几乎覆盖了全部脂肪酸组分。chr04a 9–10 Mb 正是单性状报告里反复出现的主峰（KCS 基因簇所在），在联合分析里它以“78 个 QTN、11 个性状”的身份再次出现，说明这个区段不是某一个性状的特异位点，而是整个延伸通路的共享调控区。
+
+**注意热点 ≠ 因果区。** 1 Mb 内可能有上百个基因，QTL 落进来只说明“这个区段与多个性状有关”。要把范围缩小，需要看热点内的共享基因（步骤 3）和连锁结构（单性状报告里的 LD 图）。
+
+# 步骤 5　热点区的通路富集
+
+## 材料方法
+
+取被 ≥ 3 个性状共享的基因（`r sg[n_traits >= 3, .N]` 个），以 KEGG 注释文件中的全部基因为背景，做超几何检验（`phyper`，单侧），并用 Benjamini-Hochberg 校正得到 FDR。只报告命中 ≥ 2 个基因的通路。背景与注释文件来自项目既有的 KEGG 映射表。
+
+## 结果
+
+```{r tab8}
+t8 <- kegg[1:min(12, .N), .(通路 = term, 名称 = ifelse(is.na(name), "—", name),
+                            命中基因数 = k, p = fk(p), FDR = fk(FDR), 基因 = genes)]
+kable(t8, caption = "表 8　共享基因的 KEGG 通路富集", format = "html", row.names = FALSE)
+```
+
+## 解读
+
+富集结果集中在三条通路上：**map01100（代谢通路）**、**map01110（次生代谢物生物合成）** 与 **map00062（脂肪酸延伸）**。前两条是宽泛的上位通路，命中基因多、解释力有限；真正有信息量的是 **map00062**——命中的正是 KCS 家族（`Actnc04aG0088000`、`Actnc04aG0088400`），与步骤 3 的观察一致。
+
+这说明多性状共享基因不是随机分布，而是集中在脂肪酸延伸这一步。反过来说，没有富集到生育酚合成通路的基因，说明 VE 与其他性状的共享位点更可能是统计重叠或调控共享，而不是同一酶系。
+
+# 步骤 6　脂肪酸轴：链长与去饱和
+
+## 材料方法
+
+把 14 个脂肪酸性状按生化顺序排列：饱和链 C16:0 → C18:0 → C20:0 → C22:0 → C24:0；对应的单不饱和与多不饱和组分插在各自链长之后。统计相邻链长性状之间的相关，以及只在这条轴上出现的共享基因，用于判断“延伸”与“去饱和”两条支路各自贡献了多少共享信号。
+
+## 结果
+
+```{r tab9}
+fa_pair <- cu[trait1 %in% fa_order & trait2 %in% fa_order][1:12]
+t9 <- fa_pair[, .(性状1 = lab(trait1), 性状2 = lab(trait2),
+                  r = sprintf("%.3f", r), p = fk(p))]
+kable(t9, caption = "表 9　脂肪酸性状之间最强的 12 对相关", format = "html", row.names = FALSE)
+```
+
+```{r tab10}
+fa_genes <- sg[n_traits >= 2 & grepl("^fa_", traits) & !grepl("vee_|protein|oil_|seed_", traits)][1:15]
+t10 <- fa_genes[, .(基因 = gene_id, 涉及性状数 = n_traits, 性状 = traits,
+                    最高LOD = sprintf("%.1f", max_lod),
+                    功能注释 = fifelse(is.na(Preferred_name) | Preferred_name %in% c("-", "—"),
+                                       "未注释", Preferred_name))]
+kable(t10, caption = "表 10　只在脂肪酸性状之间共享的前 15 个基因", format = "html", row.names = FALSE)
+```
+
+## 解读
+
+脂肪酸轴上的相关呈现清晰的**两条梯度**：一条是“同链长、不同饱和度”（C18:1–C18:2，r = −0.71，负相关说明底物竞争），另一条是“相邻链长”（C22:1–C24:1，r = 0.89；C22:0–C24:0，r = 0.84，正相关说明产物-底物接力）。这两条梯度对应的酶也不同：前者是 FAD 去饱和酶，后者是 KCS 延伸酶。
+
+表 10 里只属于脂肪酸性状的共享基因，多数注释为 KCS/FAE 家族或去饱和酶，与上面的梯度一致。这也解释了为什么脂肪酸性状的 QTL 数量普遍偏多：它们共享同一套酶系，信号在多个性状间“串”起来，单个性状的报告里看到的往往只是这条通路的一个切面。
+
+# 步骤 7　维生素 E 组分
+
+## 材料方法
+
+对 5 个 VE 组分（α、β、γ、δ、总量）单独看相关结构与共享位点。VE 合成通路中，γ-生育酚经 γ-生育酚甲基转移酶（γ-TMT）甲基化为 α-生育酚，因此 γ 与 α 之间预期负相关、γ 与总量正相关。
+
+## 结果
+
+```{r fig5, results='asis'}
+embed("j6_vee_cor.png", "图 6　维生素 E 五个组分之间的相关矩阵。方格内数字为 Pearson r，颜色蓝负红正。", 700)
+```
+
+```{r tab11}
+vee_pair <- cu[trait1 %in% vee_tr & trait2 %in% vee_tr]
+t11 <- vee_pair[, .(性状1 = lab(trait1), 性状2 = lab(trait2),
+                    r = sprintf("%.3f", r), p = fk(p))]
+kable(t11, caption = "表 11　维生素 E 组分之间的相关", format = "html", row.names = FALSE)
+```
+
+```{r tab12}
+vee_genes <- sg[n_traits >= 2 & grepl("vee_", traits)][1:min(10, .N)]
+t12 <- vee_genes[, .(基因 = gene_id, 涉及性状数 = n_traits, 性状 = traits,
+                     最高LOD = sprintf("%.1f", max_lod),
+                     功能注释 = fifelse(is.na(Preferred_name) | Preferred_name %in% c("-", "—"),
+                                        "未注释", Preferred_name))]
+kable(t12, caption = "表 12　与维生素 E 性状共享的基因", format = "html", row.names = FALSE)
+```
+
+## 解读
+
+VE 五个组分的相关结构与生化通路吻合：总量与 γ 的 r = 0.90（γ 是主要组分，总量由它主导），γ 与 α 呈负相关——这正是 γ-TMT 把 γ 转化为 α 的底物竞争关系。δ 与 β 的相关较弱，说明这两个支路的通量小、受其他因素影响更多。
+
+共享基因里若出现甲基转移酶类注释，可与 γ→α 的转化直接对应；若没有，说明 VE 组分差异更多由上游 GGPP/HPPD 供应或降解速率决定，而不是甲基化这一步。与脂肪酸性状的共享位点很少，说明 VE 与脂肪酸在遗传调控上相对独立——这与“含油量与 VE 无强相关”的表型结果一致。
+
+# 步骤 8　品质与产量的权衡
+
+## 材料方法
+
+单独考察含油量、蛋白质、千粒重三者之间，以及它们与脂肪酸总体的相关；并统计这三个性状与其他性状共享的基因，判断“品质-产量”权衡是表型层面的分配效应，还是有共同的遗传位点。
+
+## 结果
+
+```{r tab13}
+q_pair <- cu[(trait1 %in% qual | trait2 %in% qual)]
+t13 <- q_pair[1:12, .(性状1 = lab(trait1), 性状2 = lab(trait2),
+                      r = sprintf("%.3f", r), p = fk(p))]
+kable(t13, caption = "表 13　品质性状与其他性状的相关", format = "html", row.names = FALSE)
+```
+
+```{r tab14}
+q_genes <- sg[n_traits >= 2 & grepl("oil_g100g|protein_g100g|seed_weight_g", traits)][1:min(12, .N)]
+t14 <- q_genes[, .(基因 = gene_id, 涉及性状数 = n_traits, 性状 = traits,
+                   最高LOD = sprintf("%.1f", max_lod),
+                   功能注释 = fifelse(is.na(Preferred_name) | Preferred_name %in% c("-", "—"),
+                                      "未注释", Preferred_name))]
+kable(t14, caption = "表 14　与品质性状共享的基因", format = "html", row.names = FALSE)
+```
+
+## 解读
+
+含油量与蛋白质 r = −0.88，是全部 231 对里最强的负相关，也是唯一一对“两个主成分互相挤压”的关系：种子把有限的碳氮资源分配给油脂还是蛋白，此消彼长。千粒重与含油量的相关明显弱于这一对，说明粒重不是简单的“多装油”，还受其他因素影响。
+
+**遗传上是否共享位点**决定了这个权衡能不能被打断：如果含油量与蛋白质的 QTL 大量落在同一基因上（如某个同时调控油脂合成与蛋白储存的转录因子），那么育种上想“同时提高”就很难；如果共享基因很少、各自的位点独立，则存在同时改良的空间。表 14 给出了候选，需要结合单性状报告里的效应方向判断——同一个基因对两个性状的效应方向相反时，才是真正的权衡位点。
+
+# 讨论与局限
+
+## 结论
+
+1. **脂肪酸是一个整体**：14 个组分通过“延伸（KCS）”与“去饱和（FAD）”两条支路连成网络，共享位点集中在 chr03a 0–1 Mb、chr04a 9–10 Mb、chr02a 1–2 Mb 三个热点，其中 chr04a 9–10 Mb 的 KCS 簇同时关联 4 个延伸链性状。
+2. **品质是分配问题**：含油量与蛋白质强负相关，属于资源分配；是否有共同遗传位点，取决于表 14 中候选基因的效应方向。
+3. **VE 相对独立**：组分间符合 γ→α 的转化关系，但与脂肪酸共享位点少，可分别改良。
+
+## 五条局限
+
+1. **共享基因不是共定位**：本报告只统计“同一基因出现在多个性状的 QTL 列表里”，没有做正式的共定位（colocalization）检验，无法区分“一个位点两个效应”与“两个紧邻位点各管一个性状”。
+2. **统计功效不均**：QTN 多的性状更容易与别人“共享”，QTN 少的（蛋白质、α-生育酚）天然吃亏，共享基因数偏低可能只是功效不足。
+3. **表型相关受群体结构影响**：相关矩阵未校正群体结构，强相关中可能混有亚群效应。
+4. **热点分辨率粗**：1 Mb 分箱只用于展示聚集，不能当作候选区间；真正的候选区间应以单性状报告的主峰窗口为准。
+5. **VE 表型来自单独测定**：与脂肪酸虽为同一批样本，但测定批次不同，相关性中可能含有批次效应。
+
+# 软件与版本
+
+```{r tab15}
+kable(data.table(
+  软件 = c("R", "Fast3VmrMLM", "data.table", "ggplot2"),
+  版本 = c(as.character(getRversion()), "2.0",
+           tryCatch(as.character(packageVersion("data.table")), error = function(e) "—"),
+           tryCatch(as.character(packageVersion("ggplot2")), error = function(e) "—")),
+  用途 = c("统计计算与绘图", "各性状 QTL 检出（上游）", "数据整理", "绘图")),
+  caption = "表 15　主要软件与版本", format = "html", row.names = FALSE)
+```
+
+**表 15 解读。** 联合分析本身不重新做关联检验，只整合上游 22 个性状的 Fast3VmrMLM 结果，因此软件表只列整合与绘图用到的工具；上游参数见各单性状报告。
+
+# 文件清单
+
+```{r tab16}
+t16 <- data.table(
+  文件 = c("results/joint/tab_cor.tsv", "results/joint/tab_cor_matrix.tsv",
+           "results/joint/tab_qtl_all.tsv", "results/joint/tab_qtl_summary.tsv",
+           "results/joint/tab_shared_genes.tsv", "results/joint/tab_shared_markers.tsv",
+           "results/joint/tab_hotspots.tsv", "results/joint/tab_trait_pair_shared.tsv",
+           "results/joint/tab_kegg_shared.tsv", "results/joint/tab_gene_trait_matrix.tsv",
+           "figures/joint/j1_cor_heatmap.png", "figures/joint/j2_qtl_bar.png",
+           "figures/joint/j3_pair_shared.png", "figures/joint/j4_hotspots.png",
+           "figures/joint/j5_top_genes.png", "figures/joint/j6_vee_cor.png",
+           "scripts/50_joint_inputs.R", "report/51_joint_report.Rmd"),
+  内容 = c("两两相关（r, p）", "相关矩阵（宽表）", "22 性状全部 QTL",
+           "各性状 QTL 汇总", "共享基因", "共享位点", "多性状热点",
+           "两两性状共享基因数", "共享基因 KEGG 富集", "基因×性状矩阵",
+           "图 1 相关矩阵", "图 2 QTL 数", "图 3 共享基因", "图 4 多效基因",
+           "图 5 热点", "图 6 VE 相关", "联合输入脚本", "报告模板"))
+kable(t16, caption = "表 16　交付文件清单", format = "html", row.names = FALSE)
+```
+
+**表 16 解读。** 所有中间表都在 `results/joint/`，图在 `figures/joint/`，重跑只需执行 `scripts/50_joint_inputs.R` 再渲染本模板。
