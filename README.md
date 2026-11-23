@@ -2,11 +2,17 @@
 
 Bioinformatics analysis skills collection.
 
-每个 skill 一个目录，内含 `SKILL.md`（主文档）、`README_zh.md`（中文使用说明）、可选
-`templates/`（可直接复用的脚本模板）、`references/`、`scripts/`。所有 skill 的 SKILL.md
-末尾都有 **Citations** 章节（软件与方法原文 + BibTeX + Methods 模板句），发表论文时直接引用。
+每个 Skill 一个目录，入口为 `SKILL.md`。按需提供 `README_zh.md`、`templates/`、
+`references/`、`scripts/` 和 `assets/`。论文引用以对应 Skill 的主文档或参考资料为准。
 
 ## Skills
+
+### [`omics-report-writing`](omics-report-writing/SKILL.md) — 组学论文报告写作与审校
+
+用已有产物写 RNA-seq、基因组重测序或组装的论文支撑报告，不替代分析流程。逐样本报告
+Raw/Clean reads、碱基量、Q20/Q30、GC 和 mapping；正文沿「输入 → 方法 → 过滤 → 结果 → 图表」
+组织。附[论文模板](omics-report-writing/templates/paper-report.md)、[逐样本 QC 表头](omics-report-writing/assets/table-s1-rnaseq-qc.tsv)
+和只读校验脚本；与侧重自包含 HTML 出稿的 `analysis-report` 并列使用。
 
 ### `rnaseq-hisat2-featurecounts-deseq2` — 植物批量 RNA-seq 主线流程
 

@@ -1,0 +1,1 @@
+sample_id	group	time	biological_replicate	batch	raw_R1_file	raw_R2_file	raw_reads	raw_bases	raw_q20_pct	raw_q30_pct	raw_gc_pct	clean_reads	clean_bases	clean_q20_pct	clean_q30_pct	clean_gc_pct	mapped_reads	mapping_input_reads	mapping_pct
