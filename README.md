@@ -147,3 +147,14 @@ analysis-report/
 - 每一步固定三段：**材料方法**（软件/版本/参数/阈值来源）→ **结果**（只放事实）→ **解读**（2–4 句）
 - 解读回答三件事：数字说明什么、能推出什么、有什么保留；不许拿后文结论倒推
 - 交付前跑自检清单：正文数字与表一致、每图有编号与引用、无服务器路径与账号
+
+### [`plant-functional-annotation`](plant-functional-annotation/SKILL.md) — 植物蛋白编码基因功能注释
+
+对每基因代表蛋白运行 eggNOG-mapper、DIAMOND 同源搜索和 InterProScan 保守结构域分析，保留原始 ID 与证据来源，并按方法汇总 GO、KEGG 和覆盖率。
+
+```
+plant-functional-annotation/
+├── SKILL.md
+├── README.md
+└── scripts/select_best_diamond_hits.py
+```
