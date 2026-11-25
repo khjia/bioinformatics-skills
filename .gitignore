@@ -30,3 +30,6 @@ __pycache__/
 !/togcn/
 !/analysis-report/
 !/omics-report-writing/
+!/genome-circos/
+/genome-circos/demo-data/
+/genome-circos/demo-output/

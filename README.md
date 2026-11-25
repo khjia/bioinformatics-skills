@@ -7,6 +7,10 @@ Bioinformatics analysis skills collection.
 
 ## Skills
 
+### [`genome-circos`](genome-circos/SKILL.md) — 双基因组染色体圈图与英文图例
+
+同源染色体按对交错排列，展示基因与重复序列分布、端粒、rDNA 和可选的比对连带。输出 SVG、英文图例与窗口统计表；可另导出矢量 PDF 和 PNG。[使用示例](genome-circos/README.md)仅使用合成数据。
+
 ### [`omics-report-writing`](omics-report-writing/SKILL.md) — 组学论文报告写作与审校
 
 用已有产物写 RNA-seq、基因组重测序或组装的论文支撑报告，不替代分析流程。逐样本报告
